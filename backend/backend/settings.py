@@ -145,7 +145,7 @@ AUTH_USER_MODEL = 'api.User'
 
 # Add GitHub OAuth settings
 load_dotenv()
-
+hello = "HI"
 GITHUB_CLIENT_ID = os.getenv('GITHUB_CLIENT_ID')
 GITHUB_CLIENT_SECRET = os.getenv('GITHUB_CLIENT_SECRET')
 GITHUB_REDIRECT_URI = 'http://localhost:5173/github-callback.html'
