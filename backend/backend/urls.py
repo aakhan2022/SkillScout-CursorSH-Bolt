@@ -29,4 +29,5 @@ urlpatterns = [
     path('api/repositories/add/', views.add_repository, name='add-repository'),
     path('api/repositories/', views.get_linked_repositories, name='get-repositories'),
     path('api/repositories/<str:repo_id>/', views.delete_repository, name='delete-repository'),
+    path('api/repositories/<str:repo_id>/summary/', views.get_repo_summary, name='repository-summary')
 ]

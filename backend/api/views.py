@@ -8,7 +8,7 @@ import requests
 from django.conf import settings
 from .models import User, CandidateProfile, LinkedRepository
 from .serializers import UserSerializer, CandidateProfileSerializer, LinkedRepositorySerializer
-
+from .services.repo_analyzer import RepoAnalyzer
 # Create your views here.
 
 @api_view(['POST'])
@@ -272,4 +272,54 @@ def delete_repository(request, repo_id):
         return Response(
             {'error': 'Repository not found'},
             status=status.HTTP_404_NOT_FOUND
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_repo_summary(request, repo_id):
+    try:
+        print("repo_id: ", repo_id)
+        project = LinkedRepository.objects.get(id=repo_id)
+        
+        # Check if analysis_results already exists and is not empty
+        if project.analysis_results and isinstance(project.analysis_results, dict):
+            print("Returning existing analysis results")
+            return Response(project.analysis_results)
+            
+        # If no existing analysis, perform new analysis
+        print("Generating new analysis")
+        analyzer = RepoAnalyzer(
+            github_token=settings.GITHUB_TOKEN,
+            huggingface_token=settings.HUGGINGFACE_TOKEN,
+            sonar_token=settings.SONAR_TOKEN,
+        )
+        
+        # Generate review
+        review_data = analyzer.analyze_repository(project.repo_url)
+        analysis_json = review_data.to_json()
+        
+        print("\n\nanalysis_json: ", analysis_json)
+        
+        # Save review
+        try:
+            project.analysis_results = analysis_json
+            project.save()
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        return Response(analysis_json)
+
+    except LinkedRepository.DoesNotExist:
+        return Response(
+            {'error': 'Repository not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

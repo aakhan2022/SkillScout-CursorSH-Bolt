@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Bug, GraduationCap, ChevronRight, FileCode, Folder, Code, Shield, Database, Star, Award, Target, Zap } from 'lucide-react';
 import Assessment from './Assessment';
 import BugsView from './BugsView';
 import CodeSmellsView from './CodeSmellsView';
 import SecurityView from './SecurityView';
+import { repositoryService } from '../services/repository';
+
 
 type FileType = {
   name: string;
@@ -97,6 +99,8 @@ const mockProject = {
   }
 };
 
+
+
 export default function ProjectDetails() {
   const { projectId } = useParams();
   const [activeTab, setActiveTab] = useState<'summary' | 'code' | 'analytics' | 'assessment'>('summary');
@@ -105,6 +109,77 @@ export default function ProjectDetails() {
   const [showBugsView, setShowBugsView] = useState(false);
   const [showCodeSmellsView, setShowCodeSmellsView] = useState(false);
   const [showSecurityView, setShowSecurityView] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [repoSummary, setRepoSummary] = useState<any>(null);
+
+  const [projectData, setProjectData] = useState(mockProject);
+  const fetchProjectSummary = async (projectId: string) => {
+    setLoading(true);
+    try {
+      const repo_summary = await repositoryService.getRepositorySummary(projectId);
+      console.log(repo_summary);
+      setRepoSummary(repo_summary);
+      
+      // Create a transformed version of the data that matches our UI structure
+      const transformedData = {
+        ...mockProject, // Keep the mock structure for fields we don't have yet
+        name: repo_summary.project_info.name,
+        description: repo_summary.project_info.description,
+        technologies: repo_summary.project_info.technologies,
+        analytics: {
+          ...mockProject.analytics,
+          codeQuality: {
+            ...mockProject.analytics.codeQuality,
+            bugs: repo_summary.code_quality.metrics.bugs,
+            vulnerabilities: repo_summary.code_quality.metrics.vulnerabilities,
+            codeSmells: repo_summary.code_quality.metrics.code_smells,
+          }
+        },
+        codeAnalysis: {
+          ...mockProject.codeAnalysis,
+          // Calculate overall score based on code quality metrics
+          overallScore: calculateOverallScore(repo_summary.code_quality.metrics),
+          codeQuality: {
+            ...mockProject.codeAnalysis.codeQuality,
+            score: calculateCodeQualityScore(repo_summary.code_quality.metrics),
+            details: generateCodeQualityDetails(repo_summary.code_quality)
+          }
+        }
+      };
+
+      setProjectData(transformedData);
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to fetch project Summary:', error);
+      setLoading(false);
+    }
+  };
+
+  // Helper functions to calculate scores and generate details
+  const calculateOverallScore = (metrics: any) => {
+    // Simple calculation based on number of issues
+    const totalIssues = metrics.bugs + metrics.vulnerabilities + metrics.code_smells;
+    return Math.max(10 - totalIssues, 0); // Subtract issues from 10, minimum 0
+  };
+
+  const calculateCodeQualityScore = (metrics: any) => {
+    // Similar calculation for code quality specific score
+    const totalIssues = metrics.bugs + metrics.code_smells;
+    return Math.max(10 - totalIssues, 0);
+  };
+
+  const generateCodeQualityDetails = (codeQuality: any) => {
+    const issues = codeQuality.issues;
+    if (issues.length === 0) {
+      return "No significant code quality issues found.";
+    }
+    
+    return `Found ${issues.length} issue(s)`;
+  };
+
+  useEffect(() => {
+    fetchProjectSummary(String(projectId));
+  }, [projectId]);
 
   const toggleFolder = (path: string) => {
     const newExpandedFolders = new Set(expandedFolders);
@@ -216,11 +291,20 @@ export default function ProjectDetails() {
   const AnalyticsContent = () => (
     <div className="space-y-8">
       {showBugsView ? (
-        <BugsView onBack={() => setShowBugsView(false)} />
+        <BugsView 
+          onBack={() => setShowBugsView(false)} 
+          bugs={repoSummary?.code_quality.issues.filter(issue => issue.type === 'BUG') || []}
+        />
       ) : showCodeSmellsView ? (
-        <CodeSmellsView onBack={() => setShowCodeSmellsView(false)} />
+        <CodeSmellsView 
+          onBack={() => setShowCodeSmellsView(false)} 
+          codeSmells={repoSummary?.code_quality.issues.filter(issue => issue.type === 'CODE_SMELL') || []}
+        />
       ) : showSecurityView ? (
-        <SecurityView onBack={() => setShowSecurityView(false)} />
+        <SecurityView 
+          onBack={() => setShowSecurityView(false)} 
+          vulnerabilities={repoSummary?.code_quality.security_hotspots || []}
+        />
       ) : (
         <>
           {/* Code Quality Section */}
@@ -237,7 +321,7 @@ export default function ProjectDetails() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold">{mockProject.analytics.codeQuality.bugs}</div>
+                    <div className="text-3xl font-bold">{projectData.analytics.codeQuality.bugs}</div>
                     <div className="text-gray-400">Issues</div>
                   </div>
                   <div className="flex space-x-1">
@@ -245,7 +329,7 @@ export default function ProjectDetails() {
                       <div 
                         key={i} 
                         className={`w-2 h-8 rounded-full ${
-                          i < mockProject.analytics.codeQuality.bugs ? 'bg-red-500' : 'bg-gray-700'
+                          i < projectData.analytics.codeQuality.bugs ? 'bg-red-500' : 'bg-gray-700'
                         }`} 
                       />
                     ))}
@@ -263,7 +347,7 @@ export default function ProjectDetails() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold">{mockProject.analytics.codeQuality.vulnerabilities}</div>
+                    <div className="text-3xl font-bold">{projectData.analytics.codeQuality.vulnerabilities}</div>
                     <div className="text-gray-400">Issues</div>
                   </div>
                   <div className="flex space-x-1">
@@ -271,7 +355,7 @@ export default function ProjectDetails() {
                       <div 
                         key={i} 
                         className={`w-2 h-8 rounded-full ${
-                          i < mockProject.analytics.codeQuality.vulnerabilities ? 'bg-red-500' : 'bg-gray-700'
+                          i < projectData.analytics.codeQuality.vulnerabilities ? 'bg-red-500' : 'bg-gray-700'
                         }`} 
                       />
                     ))}
@@ -289,7 +373,7 @@ export default function ProjectDetails() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold">{mockProject.analytics.codeQuality.codeSmells}</div>
+                    <div className="text-3xl font-bold">{projectData.analytics.codeQuality.codeSmells}</div>
                     <div className="text-gray-400">Issues</div>
                   </div>
                   <div className="flex space-x-1">
@@ -297,7 +381,7 @@ export default function ProjectDetails() {
                       <div 
                         key={i} 
                         className={`w-2 h-8 rounded-full ${
-                          i < mockProject.analytics.codeQuality.codeSmells ? 'bg-yellow-500' : 'bg-gray-700'
+                          i < projectData.analytics.codeQuality.codeSmells ? 'bg-yellow-500' : 'bg-gray-700'
                         }`} 
                       />
                     ))}
@@ -312,7 +396,7 @@ export default function ProjectDetails() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold">{mockProject.analytics.complexity.maintainability}</div>
+                    <div className="text-3xl font-bold">{projectData.analytics.complexity.maintainability}</div>
                     <div className="text-gray-400">Grade</div>
                   </div>
                   <div className="flex space-x-1">
@@ -320,7 +404,7 @@ export default function ProjectDetails() {
                       <div 
                         key={i} 
                         className={`w-2 h-8 rounded-full ${
-                          mockProject.analytics.complexity.maintainability === 'A' ? 'bg-green-500' : 'bg-gray-700'
+                          projectData.analytics.complexity.maintainability === 'A' ? 'bg-green-500' : 'bg-gray-700'
                         }`} 
                       />
                     ))}
@@ -338,7 +422,7 @@ export default function ProjectDetails() {
                 <div>
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-400">Load Time</span>
-                    <span className="font-medium">{mockProject.analytics.performance.loadTime}</span>
+                    <span className="font-medium">{projectData.analytics.performance.loadTime}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-2">
                     <div className="bg-blue-500 h-2 rounded-full" style={{ width: '80%' }}></div>
@@ -348,7 +432,7 @@ export default function ProjectDetails() {
                 <div>
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-400">First Contentful Paint</span>
-                    <span className="font-medium">{mockProject.analytics.performance.firstContentfulPaint}</span>
+                    <span className="font-medium">{projectData.analytics.performance.firstContentfulPaint}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-2">
                     <div className="bg-blue-500 h-2 rounded-full" style={{ width: '90%' }}></div>
@@ -358,7 +442,7 @@ export default function ProjectDetails() {
                 <div>
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-400">Time to Interactive</span>
-                    <span className="font-medium">{mockProject.analytics.performance.timeToInteractive}</span>
+                    <span className="font-medium">{projectData.analytics.performance.timeToInteractive}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-2">
                     <div className="bg-blue-500 h-2 rounded-full" style={{ width: '75%' }}></div>
@@ -375,7 +459,7 @@ export default function ProjectDetails() {
               <div className="bg-[#1a1f2e] p-6 rounded-lg">
                 <h3 className="text-xl font-medium mb-4">Cognitive Complexity</h3>
                 <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold">{mockProject.analytics.complexity.cognitive}</div>
+                  <div className="text-3xl font-bold">{projectData.analytics.complexity.cognitive}</div>
                   <div className="text-gray-400">Low</div>
                 </div>
               </div>
@@ -383,7 +467,7 @@ export default function ProjectDetails() {
               <div className="bg-[#1a1f2e] p-6 rounded-lg">
                 <h3 className="text-xl font-medium mb-4">Cyclomatic Complexity</h3>
                 <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold">{mockProject.analytics.complexity.cyclomatic}</div>
+                  <div className="text-3xl font-bold">{projectData.analytics.complexity.cyclomatic}</div>
                   <div className="text-gray-400">Good</div>
                 </div>
               </div>
@@ -394,12 +478,14 @@ export default function ProjectDetails() {
     </div>
   );
 
-  const ProjectSummaryContent = () => (
+  const ProjectSummaryContent = () => {
+    
+    return (
     <div className="space-y-8">
       {/* Project Overview */}
       <div className="bg-[#1a1f2e] rounded-lg p-6">
         <h2 className="text-2xl font-semibold mb-4">Project Overview</h2>
-        <p className="text-gray-300 mb-6">{mockProject.description}</p>
+        <p className="text-gray-300 mb-6">{projectData.description}</p>
         
         {/* Code Analysis Overview */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -408,12 +494,12 @@ export default function ProjectDetails() {
               <Star size={20} />
               <span>Overall Rating</span>
             </div>
-            <div className="text-2xl font-bold">{mockProject.codeAnalysis.overallScore}/10</div>
+            <div className="text-2xl font-bold">{projectData.codeAnalysis.overallScore}/10</div>
             <div className="mt-2">
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-blue-500 h-2 rounded-full" 
-                  style={{ width: `${(mockProject.codeAnalysis.overallScore / 10) * 100}%` }}
+                  style={{ width: `${(projectData.codeAnalysis.overallScore / 10) * 100}%` }}
                 />
               </div>
             </div>
@@ -424,12 +510,12 @@ export default function ProjectDetails() {
               <Award size={20} />
               <span>Assessment Score</span>
             </div>
-            <div className="text-2xl font-bold">{mockProject.codeAnalysis.assessmentScore}%</div>
+            <div className="text-2xl font-bold">{projectData.codeAnalysis.assessmentScore}%</div>
             <div className="mt-2">
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-green-500 h-2 rounded-full" 
-                  style={{ width: `${mockProject.codeAnalysis.assessmentScore}%` }}
+                  style={{ width: `${projectData.codeAnalysis.assessmentScore}%` }}
                 />
               </div>
             </div>
@@ -440,12 +526,12 @@ export default function ProjectDetails() {
               <Target size={20} />
               <span>Code Quality</span>
             </div>
-            <div className="text-2xl font-bold">{mockProject.codeAnalysis.codeQuality.score}/10</div>
+            <div className="text-2xl font-bold">{projectData.codeAnalysis.codeQuality.score}/10</div>
             <div className="mt-2">
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-purple-500 h-2 rounded-full" 
-                  style={{ width: `${(mockProject.codeAnalysis.codeQuality.score / 10) * 100}%` }}
+                  style={{ width: `${(projectData.codeAnalysis.codeQuality.score / 10) * 100}%` }}
                 />
               </div>
             </div>
@@ -456,12 +542,12 @@ export default function ProjectDetails() {
               <Zap size={20} />
               <span>Performance</span>
             </div>
-            <div className="text-2xl font-bold">{mockProject.codeAnalysis.performance.score}/10</div>
+            <div className="text-2xl font-bold">{projectData.codeAnalysis.performance.score}/10</div>
             <div className="mt-2">
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-yellow-500 h-2 rounded-full" 
-                  style={{ width: `${(mockProject.codeAnalysis.performance.score / 10) * 100}%` }}
+                  style={{ width: `${(projectData.codeAnalysis.performance.score / 10) * 100}%` }}
                 />
               </div>
             </div>
@@ -477,7 +563,7 @@ export default function ProjectDetails() {
                 <Code size={20} />
                 <h4 className="font-medium">Code Quality</h4>
               </div>
-              <p className="text-gray-300">{mockProject.codeAnalysis.codeQuality.details}</p>
+              <p className="text-gray-300">{projectData.codeAnalysis.codeQuality.details}</p>
             </div>
             
             <div className="bg-[#0A0C10] p-4 rounded-lg">
@@ -485,7 +571,7 @@ export default function ProjectDetails() {
                 <Shield size={20} />
                 <h4 className="font-medium">Security</h4>
               </div>
-              <p className="text-gray-300">{mockProject.codeAnalysis.security.details}</p>
+              <p className="text-gray-300">{projectData.codeAnalysis.security.details}</p>
             </div>
             
             <div className="bg-[#0A0C10] p-4 rounded-lg">
@@ -493,7 +579,7 @@ export default function ProjectDetails() {
                 <Database size={20} />
                 <h4 className="font-medium">Maintainability</h4>
               </div>
-              <p className="text-gray-300">{mockProject.codeAnalysis.maintainability.details}</p>
+              <p className="text-gray-300">{projectData.codeAnalysis.maintainability.details}</p>
             </div>
             
             <div className="bg-[#0A0C10] p-4 rounded-lg">
@@ -501,14 +587,14 @@ export default function ProjectDetails() {
                 <Zap size={20} />
                 <h4 className="font-medium">Performance</h4>
               </div>
-              <p className="text-gray-300">{mockProject.codeAnalysis.performance.details}</p>
+              <p className="text-gray-300">{projectData.codeAnalysis.performance.details}</p>
             </div>
           </div>
         </div>
 
         <h3 className="text-xl font-semibold mb-4 mt-8">Technologies</h3>
         <div className="flex flex-wrap gap-2 mb-8">
-          {mockProject.technologies.map((tech) => (
+          {projectData.technologies.map((tech) => (
             <span
               key={tech}
               className="px-3 py-1 bg-blue-900/50 text-blue-400 rounded-full text-sm"
@@ -537,6 +623,7 @@ export default function ProjectDetails() {
       </div>
     </div>
   );
+  };
 
   return (
     <div className="min-h-screen bg-[#0A0C10] text-white">
@@ -549,7 +636,7 @@ export default function ProjectDetails() {
               <div className="text-2xl font-bold">SkillScout</div>
             </div>
             <select className="bg-[#1a1f2e] text-white px-4 py-2 rounded-lg border border-gray-700">
-              <option>{mockProject.name}</option>
+              <option>{projectData.name}</option>
             </select>
           </div>
         </div>

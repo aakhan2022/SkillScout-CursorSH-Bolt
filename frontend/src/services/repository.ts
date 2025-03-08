@@ -32,7 +32,16 @@ export const repositoryService = {
   async deleteRepository(id: string): Promise<void> {
     await axios.delete(
       `${API_URL}/repositories/${id}/`,
-      { headers: getAuthHeader() }
+      { headers: getAuthHeader() },
+
     );
+  },
+
+  async getRepositorySummary(id: string): Promise<void> {
+    const response = await axios.get(
+      `${API_URL}/repositories/${id}/summary/`,
+      { headers: getAuthHeader()},
+    );
+    return response.data;
   }
 }; 

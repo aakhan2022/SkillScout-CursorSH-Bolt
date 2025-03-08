@@ -149,6 +149,9 @@ load_dotenv()
 GITHUB_CLIENT_ID = os.getenv('GITHUB_CLIENT_ID')
 GITHUB_CLIENT_SECRET = os.getenv('GITHUB_CLIENT_SECRET')
 GITHUB_REDIRECT_URI = 'http://localhost:5173/github-callback.html'
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
+SONAR_TOKEN = os.getenv('SONAR_TOKEN')
 
 # Add these settings for JWT
 SIMPLE_JWT = {
