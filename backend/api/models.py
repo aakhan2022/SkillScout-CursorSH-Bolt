@@ -31,6 +31,16 @@ class LinkedRepository(models.Model):
     repo_url = models.URLField()
     description = models.TextField(blank=True)
     languages = JSONField(default=list)
-    analysis_status = models.CharField(max_length=20, default='pending')
-    last_analyzed = models.DateTimeField(null=True)
-    analysis_results = JSONField(default=dict)
+    analysis_status = models.CharField(
+        max_length=20, 
+        choices=[
+            ('pending', 'Pending'),
+            ('analyzing', 'Analyzing'),
+            ('complete', 'Complete'),
+            ('failed', 'Failed')
+        ],
+        default='pending'
+    )
+    analysis_results = JSONField(default=dict, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
