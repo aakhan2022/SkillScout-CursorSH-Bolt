@@ -87,8 +87,10 @@ export default function Dashboard() {
     setShowFeedback(false);
   };
 
-  const handleProjectClick = (projectId: string) => {
-    navigate(`/project/${projectId}`);
+  const handleProjectClick = (project: LinkedRepository) => {
+    if (project.analysis_status === 'complete') {
+      navigate(`/project/${project.id}`);
+    }
   };
 
   const handleEditProfile = () => {
@@ -262,8 +264,12 @@ export default function Dashboard() {
             projects.map((project) => (
               <div
                 key={project.id}
-                className="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors cursor-pointer"
-                onClick={() => handleProjectClick(project.id)}
+                className={`bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors cursor-pointer ${
+                  project.analysis_status === 'complete'
+                    ? ''
+                    : 'opacity-70 cursor-not-allowed'
+                }`}
+                onClick={() => handleProjectClick(project)}
               >
                 <div className="flex justify-between items-start">
                   <div>
@@ -288,6 +294,20 @@ export default function Dashboard() {
                   >
                     <Trash2 size={20} />
                   </button>
+                </div>
+                <div className="flex items-center space-x-2 mt-2">
+                  {project.analysis_status === 'pending' && (
+                    <span className="text-yellow-400">Analysis Pending...</span>
+                  )}
+                  {project.analysis_status === 'analyzing' && (
+                    <span className="text-blue-400">Analyzing...</span>
+                  )}
+                  {project.analysis_status === 'failed' && (
+                    <span className="text-red-400">Analysis Failed</span>
+                  )}
+                  {project.analysis_status === 'complete' && (
+                    <span className="text-green-400">Analysis Complete</span>
+                  )}
                 </div>
               </div>
             ))
