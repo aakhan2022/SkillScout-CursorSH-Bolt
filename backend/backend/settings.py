@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from datetime import timedelta
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -158,3 +159,10 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
+
+# Directory for cloned repositories
+CLONED_REPOS_DIR = os.path.join(BASE_DIR, 'cloned')
+
+# Create the directory if it doesn't exist
+if not os.path.exists(CLONED_REPOS_DIR):
+    os.makedirs(CLONED_REPOS_DIR)
