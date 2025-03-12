@@ -147,6 +147,7 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
                     "severity": issue.get("severity"),
                     "type": issue.get("type"),
                     "component": issue.get("component"),
+                    "file_path": str(Path(file_path).resolve()),
                     "textRange": issue.get("textRange", {}),
                     "code_snippet": code_snippet,
                     "introduction": rule_details.get("introduction"),
@@ -185,9 +186,19 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
 
             for hotspot in hotspots_data:
                 hotspot_key = hotspot.get("key")
+                component_path = hotspot.get("component", "").split(":")[-1]  # Extract relative file path
+                text_range = hotspot.get("textRange", {})
+
+                if component_path:
+                    file_path = os.path.join(self.repo_path, component_path)
+
+
                 details = self._fetch_hotspot_details(hotspot_key)
                 detailed_hotspots.append({
                     "message": hotspot.get("message"),
+                    "file_path": str(Path(file_path).resolve()),
+                    "textRange": hotspot.get("textRange", {}),
+                    "securityCategory": hotspot.get("securityCategory"),
                     "severity": hotspot.get("vulnerabilityProbability"),
                     "component": hotspot.get("component"),
                     "line": hotspot.get("line"),
