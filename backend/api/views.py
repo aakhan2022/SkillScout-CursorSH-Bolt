@@ -285,6 +285,8 @@ def get_repo_summary(request, repo_id):
         # Check if analysis_results already exists and is not empty
         if project.analysis_results and isinstance(project.analysis_results, dict):
             print("Returning existing analysis results")
+            project.analysis_status = 'complete'
+            project.save()
             return Response(project.analysis_results)
             
         # If no existing analysis, perform new analysis
@@ -304,6 +306,7 @@ def get_repo_summary(request, repo_id):
         # Save review
         try:
             project.analysis_results = analysis_json
+            project.analysis_status = 'complete'
             project.save()
         except Exception as e:
             return Response(

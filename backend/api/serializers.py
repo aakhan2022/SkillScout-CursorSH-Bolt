@@ -28,4 +28,4 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
 class LinkedRepositorySerializer(serializers.ModelSerializer):
     class Meta:
         model = LinkedRepository
-        fields = ('id', 'repo_name', 'repo_url', 'description', 'languages') 
+        fields = ('id', 'repo_name', 'repo_url', 'description', 'languages', 'analysis_status') 
