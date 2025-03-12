@@ -9,6 +9,8 @@ export interface LinkedRepository {
   repo_url: string;
   description: string;
   languages: string[];
+  analysis_status: 'pending' | 'analyzing' | 'complete' | 'failed';
+  analysis_results?: any;
 }
 
 export const repositoryService = {
@@ -41,6 +43,14 @@ export const repositoryService = {
     const response = await axios.get(
       `${API_URL}/repositories/${id}/summary/`,
       { headers: getAuthHeader()},
+    );
+    return response.data;
+  },
+
+  async pollAnalysisStatus(repoId: string): Promise<LinkedRepository> {
+    const response = await axios.get(
+      `${API_URL}/repositories/${repoId}/`,
+      { headers: getAuthHeader() }
     );
     return response.data;
   }
