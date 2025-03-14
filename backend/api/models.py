@@ -2,8 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.db.models import JSONField
 
-# Create your models here.
-
 class User(AbstractUser):
     ROLE_CHOICES = (
         ('candidate', 'Candidate'),
@@ -44,3 +42,21 @@ class LinkedRepository(models.Model):
     analysis_results = JSONField(default=dict, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+class Assessment(models.Model):
+    repository = models.ForeignKey(LinkedRepository, on_delete=models.CASCADE, related_name='assessments')
+    questions = JSONField()  # Stores questions, options, and correct answers
+    correct_answers = models.IntegerField(null=True, blank=True)
+    score = models.IntegerField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+class AssessmentAttempt(models.Model):
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, related_name='attempts')
+    candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
+    answers = JSONField()  # Stores user's answers
+    correct_answers = models.IntegerField()
+    score = models.IntegerField()
+    time_spent = models.IntegerField()  # Time spent in seconds
+    completed_at = models.DateTimeField(auto_now_add=True)

@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 import requests
 from pathlib import Path
 from loguru import logger
@@ -25,7 +26,7 @@ class SonarAnalyzer:
         self.headers = {"Authorization": f"Bearer {sonar_token}"}
         self.repo_path = None
 
-    def analyze_repository(self, repo_path: str, project_key: str) -> Optional[SonarQubeAnalysis]:
+    def analyze_repository(self, repo_path: str, project_key: str) -> Optional[Dict]:
         """Run SonarQube analysis on a repository"""
         try:
             # Ensure repo_path is absolute
@@ -34,7 +35,14 @@ class SonarAnalyzer:
             logger.info(f"Running SonarQube analysis on: {repo_path}")
 
             # Run SonarQube scanner
-            self._run_sonar_scanner(repo_path, project_key)
+            scanner_result = self._run_sonar_scanner(repo_path, project_key)
+            if scanner_result == False:
+                logger.error("SonarQube scanner failed")
+                return None
+
+            if not self._wait_for_analysis_completion(project_key):
+                logger.error("Analysis completion check failed or timed out")
+                return None
             
             # Wait for analysis to complete and fetch results
             return self._fetch_analysis_results(project_key)
@@ -42,8 +50,51 @@ class SonarAnalyzer:
         except Exception as e:
             logger.error(f"Error in SonarQube analysis: {str(e)}")
             return None
+    
+    def _wait_for_analysis_completion(self, project_key: str, timeout: int = 300, interval: int = 10) -> bool:
+        """
+        Wait for SonarQube analysis to complete.
+        
+        Args:
+            project_key: The project key to check
+            timeout: Maximum time to wait in seconds (default: 5 minutes)
+            interval: Time between checks in seconds (default: 10 seconds)
+        """
+        try:
+            start_time = time.time()
+            while (time.time() - start_time) < timeout:
+                # Check analysis status
+                status_url = f"{self.sonar_host}/api/ce/component"
+                response = requests.get(
+                    status_url,
+                    headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"},
+                    params={"component": project_key}
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                queue = data.get('queue', [])
+                
+                # If queue is empty, analysis is complete
+                if not queue:
+                    # Double check if we have analysis results
+                    metrics_url = f"{self.sonar_host}/api/measures/component"
+                    metrics_response = requests.get(
+                        metrics_url,
+                        headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"},
+                        params={
+                            "component": project_key,
+                            "metricKeys": "bugs"
+                        }
+                    )
+                    
+                    if metrics_response.status_code == 200:
+                        return True
+        except Exception as e:
+            logger.error(f"Error checking analysis completion: {str(e)}")
+            return False
 
-    def _run_sonar_scanner(self, repo_path: str, project_key: str):
+    def _run_sonar_scanner(self, repo_path: str, project_key: str) -> bool:
         """Run SonarQube scanner on the repository"""
         try:
             # Prepare sonar-project.properties
@@ -63,37 +114,37 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
             SONAR_SCANNER_PATH = r"D:\My Folder\University\FYP\sonarqube-25.1.0.102122\sonar-scanner-6.2.1.4610-windows-x64\bin\sonar-scanner.bat"
 
             cmd = [
-            SONAR_SCANNER_PATH,
-            f"-Dsonar.projectKey={project_key}",
-            "-Dsonar.sources=.",
-            f"-Dsonar.host.url={self.sonar_host}",
-            f"-Dsonar.token={self.sonar_token}"
-        ]
+                SONAR_SCANNER_PATH,
+                f"-Dsonar.projectKey={project_key}",
+                "-Dsonar.sources=.",
+                f"-Dsonar.host.url={self.sonar_host}",
+                f"-Dsonar.token={self.sonar_token}"
+            ]
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_path)
-            # result = subprocess.run(
-            #     ["sonar-scanner"],
-            #     cwd=repo_path,
-            #     capture_output=True,
-            #     text=True
-            # )
 
             if result.returncode != 0:
-                raise Exception(f"SonarQube scanner failed: {result.stderr}")
+                logger.error(f"SonarQube scanner failed: {result.stderr}")
+                return False
 
             logger.info("SonarQube analysis completed successfully")
+            return True
 
         except Exception as e:
             logger.error(f"Error running SonarQube scanner: {str(e)}")
-            raise
+            return False
 
-    def _fetch_analysis_results(self, project_key: str) -> SonarQubeAnalysis:
+    def _fetch_analysis_results(self, project_key: str) -> Dict:
         """Fetch analysis results from SonarQube API"""
         try:
             # Get project metrics
             metrics_url = f"{self.sonar_host}/api/measures/component"
             metrics_params = {
                 "component": project_key,
-                "metricKeys": "bugs,vulnerabilities,code_smells,security_hotspots,cognitive_complexity,complexity"
+                "metricKeys": (
+                    "bugs,vulnerabilities,code_smells,security_hotspots,"
+                    "cognitive_complexity,complexity,sqale_rating,"
+                    "reliability_rating,security_rating"
+                )
             }
             
             metrics_response = requests.get(
@@ -109,8 +160,6 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
                 m['metric']: float(m['value']) 
                 for m in metrics_data.get('component', {}).get('measures', [])
             }
-
-           
 
             # Get issues
             issues_url = f"{self.sonar_host}/api/issues/search"
@@ -157,13 +206,17 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
             # Fetch security hotspots
             security_hotspots = self._fetch_security_hotspots(project_key)
 
-
             return {
                 "metrics": {
                     "bugs": int(measures.get("bugs", 0)),
                     "vulnerabilities": int(measures.get("vulnerabilities", 0)),
                     "code_smells": int(measures.get("code_smells", 0)),
                     "security_hotspots": int(measures.get("security_hotspots", 0)),
+                    "cognitive_complexity": int(measures.get("cognitive_complexity", 0)),
+                    "cyclomatic_complexity": int(measures.get("complexity", 0)),
+                    "maintainability_rating": self._convert_rating(measures.get("sqale_rating", 1)),
+                    "reliability_rating": self._convert_rating(measures.get("reliability_rating", 1)),
+                    "security_rating": self._convert_rating(measures.get("security_rating", 1)),
                 },
                 "issues": extracted_issues,
                 "security_hotspots": security_hotspots,
@@ -171,7 +224,18 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
 
         except Exception as e:
             logger.error(f"Error fetching SonarQube results: {str(e)}")
-            raise
+            return None
+    
+    def _convert_rating(self, rating: float) -> str:
+        """Convert SonarQube rating from number to letter grade"""
+        rating_map = {
+            1: 'A',
+            2: 'B',
+            3: 'C',
+            4: 'D',
+            5: 'E'
+        }
+        return rating_map.get(int(rating), 'N/A')
 
     def _fetch_security_hotspots(self, project_key: str) -> List[Dict]:
         """Fetches security hotspots from SonarQube API."""
@@ -189,15 +253,20 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
                 component_path = hotspot.get("component", "").split(":")[-1]  # Extract relative file path
                 text_range = hotspot.get("textRange", {})
 
+                code_snippet = None
+                if component_path and text_range:
+                    file_path = os.path.join(self.repo_path, component_path)
+                    code_snippet = self._extract_code_snippet(file_path, text_range)
+
                 if component_path:
                     file_path = os.path.join(self.repo_path, component_path)
-
 
                 details = self._fetch_hotspot_details(hotspot_key)
                 detailed_hotspots.append({
                     "message": hotspot.get("message"),
                     "file_path": str(Path(file_path).resolve()),
                     "textRange": hotspot.get("textRange", {}),
+                    "code_snippet": code_snippet,
                     "securityCategory": hotspot.get("securityCategory"),
                     "severity": hotspot.get("vulnerabilityProbability"),
                     "component": hotspot.get("component"),
@@ -225,7 +294,6 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
             logger.error(f"Error fetching hotspot details: {str(e)}")
             return {"vulnerability_reason": None, "recommendation": None}
 
-
     def _fetch_rule_details(self, rule_key: str) -> dict:
         """Fetches rule details including introduction and root cause."""
         try:
@@ -246,9 +314,7 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
             logger.error(f"Error fetching rule details for {rule_key}: {str(e)}")
             return {"introduction": None, "root_cause": None}
 
-
     def _extract_code_snippet(self, file_path: str, text_range: dict) -> str:
-
         """Extracts the relevant code snippet from a file based on SonarQube text range."""
         try:
             with open(file_path, "r", encoding="utf-8") as f:

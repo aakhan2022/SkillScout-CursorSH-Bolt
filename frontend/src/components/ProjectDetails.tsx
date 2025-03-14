@@ -6,7 +6,7 @@ import BugsView from './BugsView';
 import CodeSmellsView from './CodeSmellsView';
 import SecurityView from './SecurityView';
 import { repositoryService } from '../services/repository';
-
+import { assessmentService } from '../services/assessment';
 
 type FileType = {
   name: string;
@@ -49,58 +49,6 @@ import { BrowserRouter } from 'react-router-dom';
   }
 ];
 
-// Mock project data
-const mockProject = {
-  name: "SkillScout",
-  description: "A comprehensive platform designed to bridge the gap between developers and employers through skill-based hiring. The project features an innovative assessment system that evaluates technical capabilities through real-world project analysis, automated code review, and interactive technical assessments. It integrates with GitHub to analyze coding patterns, project structures, and development practices, providing meaningful insights for both candidates and employers.",
-  technologies: ["React", "TypeScript", "Node.js", "PostgreSQL", "Supabase", "TailwindCSS"],
-  team: [
-    { name: "John Doe", role: "Frontend Developer" },
-    { name: "Jane Smith", role: "Backend Developer" },
-    { name: "Mike Johnson", role: "DevOps Engineer" }
-  ],
-  codeAnalysis: {
-    overallScore: 8.5,
-    assessmentScore: 92,
-    codeQuality: {
-      score: 8.7,
-      details: "Clean code structure with good practices"
-    },
-    security: {
-      score: 8.2,
-      details: "Strong security measures with minor improvements needed"
-    },
-    maintainability: {
-      score: 8.8,
-      details: "Highly maintainable with good documentation"
-    },
-    performance: {
-      score: 8.3,
-      details: "Efficient with room for optimization"
-    }
-  },
-  analytics: {
-    codeQuality: {
-      bugs: 2,
-      vulnerabilities: 3,
-      codeSmells: 5,
-      coverage: 85
-    },
-    performance: {
-      loadTime: "1.2s",
-      firstContentfulPaint: "0.8s",
-      timeToInteractive: "2.1s"
-    },
-    complexity: {
-      cognitive: 15,
-      cyclomatic: 8,
-      maintainability: "A"
-    }
-  }
-};
-
-
-
 export default function ProjectDetails() {
   const { projectId } = useParams();
   const [activeTab, setActiveTab] = useState<'summary' | 'code' | 'analytics' | 'assessment'>('summary');
@@ -111,43 +59,14 @@ export default function ProjectDetails() {
   const [showSecurityView, setShowSecurityView] = useState(false);
   const [loading, setLoading] = useState(false);
   const [repoSummary, setRepoSummary] = useState<any>(null);
+  const [assessmentData, setAssessmentData] = useState<any>(null);
+  const [loadingAssessment, setLoadingAssessment] = useState(false);
 
-  const [projectData, setProjectData] = useState(mockProject);
   const fetchProjectSummary = async (projectId: string) => {
     setLoading(true);
     try {
       const repo_summary = await repositoryService.getRepositorySummary(projectId);
-      console.log(repo_summary);
       setRepoSummary(repo_summary);
-      
-      // Create a transformed version of the data that matches our UI structure
-      const transformedData = {
-        ...mockProject, // Keep the mock structure for fields we don't have yet
-        name: repo_summary.project_info.name,
-        description: repo_summary.project_info.description,
-        technologies: repo_summary.project_info.technologies,
-        analytics: {
-          ...mockProject.analytics,
-          codeQuality: {
-            ...mockProject.analytics.codeQuality,
-            bugs: repo_summary.code_quality.metrics.bugs,
-            vulnerabilities: repo_summary.code_quality.metrics.vulnerabilities,
-            codeSmells: repo_summary.code_quality.metrics.code_smells,
-          }
-        },
-        codeAnalysis: {
-          ...mockProject.codeAnalysis,
-          // Calculate overall score based on code quality metrics
-          overallScore: calculateOverallScore(repo_summary.code_quality.metrics),
-          codeQuality: {
-            ...mockProject.codeAnalysis.codeQuality,
-            score: calculateCodeQualityScore(repo_summary.code_quality.metrics),
-            details: generateCodeQualityDetails(repo_summary.code_quality)
-          }
-        }
-      };
-
-      setProjectData(transformedData);
       setLoading(false);
     } catch (error) {
       console.error('Failed to fetch project Summary:', error);
@@ -155,30 +74,28 @@ export default function ProjectDetails() {
     }
   };
 
-  // Helper functions to calculate scores and generate details
-  const calculateOverallScore = (metrics: any) => {
-    // Simple calculation based on number of issues
-    const totalIssues = metrics.bugs + metrics.vulnerabilities + metrics.code_smells;
-    return Math.max(10 - totalIssues, 0); // Subtract issues from 10, minimum 0
-  };
-
-  const calculateCodeQualityScore = (metrics: any) => {
-    // Similar calculation for code quality specific score
-    const totalIssues = metrics.bugs + metrics.code_smells;
-    return Math.max(10 - totalIssues, 0);
-  };
-
-  const generateCodeQualityDetails = (codeQuality: any) => {
-    const issues = codeQuality.issues;
-    if (issues.length === 0) {
-      return "No significant code quality issues found.";
+  useEffect(() => {
+    if (projectId) {
+      fetchProjectSummary(projectId);
     }
-    
-    return `Found ${issues.length} issue(s)`;
-  };
+  }, [projectId]);
 
   useEffect(() => {
-    fetchProjectSummary(String(projectId));
+    const fetchAssessment = async () => {
+      if (!projectId) return;
+      
+      try {
+        setLoadingAssessment(true);
+        const assessment = await assessmentService.getAssessment(projectId);
+        setAssessmentData(assessment);
+      } catch (error) {
+        console.error('Failed to fetch assessment:', error);
+      } finally {
+        setLoadingAssessment(false);
+      }
+    };
+
+    fetchAssessment();
   }, [projectId]);
 
   const toggleFolder = (path: string) => {
@@ -290,7 +207,9 @@ export default function ProjectDetails() {
 
   const AnalyticsContent = () => (
     <div className="space-y-8">
+
       {showBugsView ? (
+    
         <BugsView 
           onBack={() => setShowBugsView(false)} 
           bugs={repoSummary?.code_quality.issues.filter(issue => issue.type === 'BUG') || []}
@@ -299,6 +218,7 @@ export default function ProjectDetails() {
         <CodeSmellsView 
           onBack={() => setShowCodeSmellsView(false)} 
           codeSmells={repoSummary?.code_quality.issues.filter(issue => issue.type === 'CODE_SMELL') || []}
+          repoId={projectId!}
         />
       ) : showSecurityView ? (
         <SecurityView 
@@ -321,7 +241,7 @@ export default function ProjectDetails() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold">{projectData.analytics.codeQuality.bugs}</div>
+                    <div className="text-3xl font-bold">{repoSummary?.code_quality?.metrics?.bugs || 0}</div>
                     <div className="text-gray-400">Issues</div>
                   </div>
                   <div className="flex space-x-1">
@@ -329,7 +249,7 @@ export default function ProjectDetails() {
                       <div 
                         key={i} 
                         className={`w-2 h-8 rounded-full ${
-                          i < projectData.analytics.codeQuality.bugs ? 'bg-red-500' : 'bg-gray-700'
+                          i < (repoSummary?.code_quality?.metrics?.bugs || 0) ? 'bg-red-500' : 'bg-gray-700'
                         }`} 
                       />
                     ))}
@@ -347,7 +267,7 @@ export default function ProjectDetails() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold">{projectData.analytics.codeQuality.vulnerabilities}</div>
+                    <div className="text-3xl font-bold">{repoSummary?.code_quality?.metrics?.vulnerabilities || 0}</div>
                     <div className="text-gray-400">Issues</div>
                   </div>
                   <div className="flex space-x-1">
@@ -355,7 +275,7 @@ export default function ProjectDetails() {
                       <div 
                         key={i} 
                         className={`w-2 h-8 rounded-full ${
-                          i < projectData.analytics.codeQuality.vulnerabilities ? 'bg-red-500' : 'bg-gray-700'
+                          i < (repoSummary?.code_quality?.metrics?.vulnerabilities || 0) ? 'bg-red-500' : 'bg-gray-700'
                         }`} 
                       />
                     ))}
@@ -373,7 +293,7 @@ export default function ProjectDetails() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold">{projectData.analytics.codeQuality.codeSmells}</div>
+                    <div className="text-3xl font-bold">{repoSummary?.code_quality?.metrics?.code_smells || 0}</div>
                     <div className="text-gray-400">Issues</div>
                   </div>
                   <div className="flex space-x-1">
@@ -381,7 +301,7 @@ export default function ProjectDetails() {
                       <div 
                         key={i} 
                         className={`w-2 h-8 rounded-full ${
-                          i < projectData.analytics.codeQuality.codeSmells ? 'bg-yellow-500' : 'bg-gray-700'
+                          i < (repoSummary?.code_quality?.metrics?.code_smells || 0) ? 'bg-yellow-500' : 'bg-gray-700'
                         }`} 
                       />
                     ))}
@@ -396,7 +316,7 @@ export default function ProjectDetails() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-bold">{projectData.analytics.complexity.maintainability}</div>
+                    <div className="text-3xl font-bold">{repoSummary?.code_quality?.metrics?.maintainability_rating || 'N/A'}</div>
                     <div className="text-gray-400">Grade</div>
                   </div>
                   <div className="flex space-x-1">
@@ -404,7 +324,7 @@ export default function ProjectDetails() {
                       <div 
                         key={i} 
                         className={`w-2 h-8 rounded-full ${
-                          projectData.analytics.complexity.maintainability === 'A' ? 'bg-green-500' : 'bg-gray-700'
+                          repoSummary?.code_quality?.metrics?.maintainability_rating === 'A' ? 'bg-green-500' : 'bg-gray-700'
                         }`} 
                       />
                     ))}
@@ -421,54 +341,41 @@ export default function ProjectDetails() {
               <div className="space-y-6">
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-gray-400">Load Time</span>
-                    <span className="font-medium">{projectData.analytics.performance.loadTime}</span>
+                    <span className="text-gray-400">Cognitive Complexity</span>
+                    <span className="font-medium">{repoSummary?.code_quality?.metrics?.cognitive_complexity || 0}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: '80%' }}></div>
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full" 
+                      style={{ width: `${Math.min((repoSummary?.code_quality?.metrics?.cognitive_complexity || 0) / 100 * 100, 100)}%` }}
+                    />
                   </div>
                 </div>
                 
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-gray-400">First Contentful Paint</span>
-                    <span className="font-medium">{projectData.analytics.performance.firstContentfulPaint}</span>
+                    <span className="text-gray-400">Cyclomatic Complexity</span>
+                    <span className="font-medium">{repoSummary?.code_quality?.metrics?.cyclomatic_complexity || 0}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: '90%' }}></div>
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full" 
+                      style={{ width: `${Math.min((repoSummary?.code_quality?.metrics?.cyclomatic_complexity || 0) / 100 * 100, 100)}%` }}
+                    />
                   </div>
                 </div>
                 
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-gray-400">Time to Interactive</span>
-                    <span className="font-medium">{projectData.analytics.performance.timeToInteractive}</span>
+                    <span className="text-gray-400">Security Rating</span>
+                    <span className="font-medium">{repoSummary?.code_quality?.metrics?.security_rating || 'N/A'}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: '75%' }}></div>
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full" 
+                      style={{ width: `${repoSummary?.code_quality?.metrics?.security_rating === 'A' ? 100 : 0}%` }}
+                    />
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Code Complexity */}
-          <div>
-            <h2 className="text-2xl font-semibold mb-6">Code Complexity Analysis</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-[#1a1f2e] p-6 rounded-lg">
-                <h3 className="text-xl font-medium mb-4">Cognitive Complexity</h3>
-                <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold">{projectData.analytics.complexity.cognitive}</div>
-                  <div className="text-gray-400">Low</div>
-                </div>
-              </div>
-              
-              <div className="bg-[#1a1f2e] p-6 rounded-lg">
-                <h3 className="text-xl font-medium mb-4">Cyclomatic Complexity</h3>
-                <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold">{projectData.analytics.complexity.cyclomatic}</div>
-                  <div className="text-gray-400">Good</div>
                 </div>
               </div>
             </div>
@@ -478,28 +385,28 @@ export default function ProjectDetails() {
     </div>
   );
 
-  const ProjectSummaryContent = () => {
-    
-    return (
+  const ProjectSummaryContent = () => (
     <div className="space-y-8">
       {/* Project Overview */}
       <div className="bg-[#1a1f2e] rounded-lg p-6">
         <h2 className="text-2xl font-semibold mb-4">Project Overview</h2>
-        <p className="text-gray-300 mb-6">{projectData.description}</p>
+        <p className="text-gray-300 mb-6">{repoSummary?.project_info?.description}</p>
         
-        {/* Code Analysis Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-[#0A0C10] p-4 rounded-lg">
             <div className="flex items-center space-x-2 text-blue-400 mb-2">
               <Star size={20} />
               <span>Overall Rating</span>
             </div>
-            <div className="text-2xl font-bold">{projectData.codeAnalysis.overallScore}/10</div>
+            <div className="text-2xl font-bold">
+              {repoSummary?.code_quality?.metrics?.maintainability_rating || 'N/A'}
+            </div>
             <div className="mt-2">
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-blue-500 h-2 rounded-full" 
-                  style={{ width: `${(projectData.codeAnalysis.overallScore / 10) * 100}%` }}
+                  style={{ width: `${(repoSummary?.code_quality?.metrics?.maintainability_rating === 'A' ? 100 : 0)}%` }}
                 />
               </div>
             </div>
@@ -510,12 +417,20 @@ export default function ProjectDetails() {
               <Award size={20} />
               <span>Assessment Score</span>
             </div>
-            <div className="text-2xl font-bold">{projectData.codeAnalysis.assessmentScore}%</div>
+            <div className="text-2xl font-bold">
+              {loadingAssessment ? (
+                <div className="animate-pulse h-8 w-16 bg-gray-700 rounded"></div>
+              ) : assessmentData?.completed_at ? (
+                `${assessmentData.score}%`
+              ) : (
+                'Not Attempted'
+              )}
+            </div>
             <div className="mt-2">
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-green-500 h-2 rounded-full" 
-                  style={{ width: `${projectData.codeAnalysis.assessmentScore}%` }}
+                  style={{ width: assessmentData?.score ? `${assessmentData.score}%` : '0%' }}
                 />
               </div>
             </div>
@@ -524,14 +439,16 @@ export default function ProjectDetails() {
           <div className="bg-[#0A0C10] p-4 rounded-lg">
             <div className="flex items-center space-x-2 text-purple-400 mb-2">
               <Target size={20} />
-              <span>Code Quality</span>
+              <span>Security Rating</span>
             </div>
-            <div className="text-2xl font-bold">{projectData.codeAnalysis.codeQuality.score}/10</div>
+            <div className="text-2xl font-bold">
+              {repoSummary?.code_quality?.metrics?.security_rating || 'N/A'}
+            </div>
             <div className="mt-2">
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-purple-500 h-2 rounded-full" 
-                  style={{ width: `${(projectData.codeAnalysis.codeQuality.score / 10) * 100}%` }}
+                  style={{ width: `${(repoSummary?.code_quality?.metrics?.security_rating === 'A' ? 100 : 0)}%` }}
                 />
               </div>
             </div>
@@ -542,12 +459,14 @@ export default function ProjectDetails() {
               <Zap size={20} />
               <span>Performance</span>
             </div>
-            <div className="text-2xl font-bold">{projectData.codeAnalysis.performance.score}/10</div>
+            <div className="text-2xl font-bold">
+              {repoSummary?.code_quality?.metrics?.maintainability_rating || 'N/A'}
+            </div>
             <div className="mt-2">
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-yellow-500 h-2 rounded-full" 
-                  style={{ width: `${(projectData.codeAnalysis.performance.score / 10) * 100}%` }}
+                  style={{ width: `${(repoSummary?.code_quality?.metrics?.maintainability_rating === 'A' ? 100 : 0)}%` }}
                 />
               </div>
             </div>
@@ -563,7 +482,11 @@ export default function ProjectDetails() {
                 <Code size={20} />
                 <h4 className="font-medium">Code Quality</h4>
               </div>
-              <p className="text-gray-300">{projectData.codeAnalysis.codeQuality.details}</p>
+              <p className="text-gray-300">
+                {repoSummary?.code_quality?.issues?.length > 0
+                  ? `Found ${repoSummary.code_quality.issues.length} issue(s) that need attention`
+                  : 'No significant code quality issues found'}
+              </p>
             </div>
             
             <div className="bg-[#0A0C10] p-4 rounded-lg">
@@ -571,7 +494,11 @@ export default function ProjectDetails() {
                 <Shield size={20} />
                 <h4 className="font-medium">Security</h4>
               </div>
-              <p className="text-gray-300">{projectData.codeAnalysis.security.details}</p>
+              <p className="text-gray-300">
+                {repoSummary?.code_quality?.metrics?.security_rating === 'A'
+                  ? 'Strong security measures with no critical vulnerabilities'
+                  : 'Security improvements recommended'}
+              </p>
             </div>
             
             <div className="bg-[#0A0C10] p-4 rounded-lg">
@@ -579,7 +506,11 @@ export default function ProjectDetails() {
                 <Database size={20} />
                 <h4 className="font-medium">Maintainability</h4>
               </div>
-              <p className="text-gray-300">{projectData.codeAnalysis.maintainability.details}</p>
+              <p className="text-gray-300">
+                {repoSummary?.code_quality?.metrics?.maintainability_rating === 'A'
+                  ? 'Highly maintainable with good documentation'
+                  : 'Room for improvement in code maintainability'}
+              </p>
             </div>
             
             <div className="bg-[#0A0C10] p-4 rounded-lg">
@@ -587,14 +518,18 @@ export default function ProjectDetails() {
                 <Zap size={20} />
                 <h4 className="font-medium">Performance</h4>
               </div>
-              <p className="text-gray-300">{projectData.codeAnalysis.performance.details}</p>
+              <p className="text-gray-300">
+                {repoSummary?.code_quality?.metrics?.cognitive_complexity < 20
+                  ? 'Efficient with good performance characteristics'
+                  : 'Performance optimizations recommended'}
+              </p>
             </div>
           </div>
         </div>
 
         <h3 className="text-xl font-semibold mb-4 mt-8">Technologies</h3>
-        <div className="flex flex-wrap gap-2 mb-8">
-          {projectData.technologies.map((tech) => (
+        <div className="flex flex-wrap gap-2">
+          {repoSummary?.project_info?.technologies?.map((tech: string) => (
             <span
               key={tech}
               className="px-3 py-1 bg-blue-900/50 text-blue-400 rounded-full text-sm"
@@ -603,27 +538,9 @@ export default function ProjectDetails() {
             </span>
           ))}
         </div>
-
-        <h3 className="text-xl font-semibold mb-4">Team</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {mockProject.team.map((member) => (
-            <div key={member.name} className="bg-[#0A0C10] p-4 rounded-lg flex items-center space-x-4">
-              <div className="w-10 h-10 bg-blue-900/50 rounded-full flex items-center justify-center">
-                <span className="text-blue-400 font-medium">
-                  {member.name.split(' ').map(n => n[0]).join('')}
-                </span>
-              </div>
-              <div>
-                <div className="font-medium">{member.name}</div>
-                <div className="text-sm text-gray-400">{member.role}</div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
-  };
 
   return (
     <div className="min-h-screen bg-[#0A0C10] text-white">
@@ -636,7 +553,7 @@ export default function ProjectDetails() {
               <div className="text-2xl font-bold">SkillScout</div>
             </div>
             <select className="bg-[#1a1f2e] text-white px-4 py-2 rounded-lg border border-gray-700">
-              <option>{projectData.name}</option>
+              <option>{repoSummary?.project_info?.name || 'Loading...'}</option>
             </select>
           </div>
         </div>
@@ -692,10 +609,18 @@ export default function ProjectDetails() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'summary' && <ProjectSummaryContent />}
-        {activeTab === 'code' && <CodeReferenceContent />}
-        {activeTab === 'analytics' && <AnalyticsContent />}
-        {activeTab === 'assessment' && <Assessment />}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'summary' && <ProjectSummaryContent />}
+            {activeTab === 'code' && <CodeReferenceContent />}
+            {activeTab === 'analytics' && <AnalyticsContent />}
+            {activeTab === 'assessment' && <Assessment />}
+          </>
+        )}
       </div>
     </div>
   );

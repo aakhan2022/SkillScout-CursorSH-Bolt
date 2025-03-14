@@ -1,22 +1,30 @@
 import { ArrowLeft, Code, FileCode } from 'lucide-react';
+import parse from "html-react-parser";
 
 type CodeSmell = {
   message: string;
   severity: 'MAJOR' | 'CRITICAL' | 'BLOCKER' | 'MINOR' | 'INFO';
   component: string;
+  file_path: string;
   textRange: {
     startLine: number;
     endLine: number;
+    startOffset: number;
+    endOffset: number;
   };
   code_snippet: string;
+  root_cause: string;
 };
 
 type CodeSmellsViewProps = {
   onBack: () => void;
   codeSmells: CodeSmell[];
+  repoId: string;
 };
 
-export default function CodeSmellsView({ onBack, codeSmells }: CodeSmellsViewProps) {
+export default function CodeSmellsView({ onBack, codeSmells}: CodeSmellsViewProps) {
+
+
   const getImpactColor = (severity: CodeSmell['severity']) => {
     switch (severity) {
       case 'MAJOR':
@@ -66,15 +74,26 @@ export default function CodeSmellsView({ onBack, codeSmells }: CodeSmellsViewPro
               </div>
             </div>
 
+            {/* Root Cause Section */}
+            {(smell.severity == 'CRITICAL' || smell.severity == 'MAJOR' || smell.severity == 'BLOCKER' ) && smell.root_cause && (
+              <div className="mb-4 p-4 bg-[#0A0C10] rounded-lg">
+                <h4 className="text-sm font-medium text-gray-400 mb-2">Root Cause:</h4>
+                <div className="text-gray-300 prose prose-invert">
+                  {parse(smell.root_cause)}
+                </div>
+              </div>
+            )}
 
-            <div className="bg-[#0A0C10] rounded-lg p-4 mb-4">
+            <div className="bg-[#0A0C10] rounded-lg p-4">
               <div className="flex items-center space-x-2 text-gray-400 mb-2">
                 <FileCode size={16} />
                 <span>{smell.component}</span>
                 <span>Line {smell.textRange.startLine}</span>
               </div>
               <pre className="text-sm overflow-x-auto">
-                <code className="text-gray-300">{smell.code_snippet}</code>
+                <code className="block p-4 text-red-400">
+                  {smell.code_snippet}
+                </code>
               </pre>
             </div>
           </div>

@@ -20,9 +20,9 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<LinkedRepository[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
+  const [pollingProjects, setPollingProjects] = useState<Set<string>>(new Set());
   
   useEffect(() => {
-    // Fetch profile data when component mounts
     const fetchProfile = async () => {
       try {
         const profileData = await profileService.getProfile();
@@ -35,15 +35,20 @@ export default function Dashboard() {
     fetchProfile();
   }, []);
 
-  // Get first name from full name
   const firstName = profile?.full_name?.split(' ')[0] || 'User';
 
-  // Add this effect to fetch linked repositories when component mounts
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         const repos = await repositoryService.getRepositories();
         setProjects(repos);
+        
+        // Start polling for pending projects
+        repos.forEach(repo => {
+          if (repo.analysis_status === 'pending' || repo.analysis_status === 'analyzing') {
+            startPollingProject(repo.id);
+          }
+        });
       } catch (error) {
         console.error('Failed to fetch projects:', error);
       } finally {
@@ -54,6 +59,31 @@ export default function Dashboard() {
     fetchProjects();
   }, []);
 
+  const startPollingProject = (projectId: string) => {
+    if (!pollingProjects.has(projectId)) {
+      setPollingProjects(prev => new Set(prev).add(projectId));
+      
+      repositoryService.startPolling(
+        projectId,
+        (updatedRepo) => {
+          setProjects(prev => 
+            prev.map(repo => 
+              repo.id === projectId ? updatedRepo : repo
+            )
+          );
+          
+          if (updatedRepo.analysis_status === 'complete' || updatedRepo.analysis_status === 'failed') {
+            setPollingProjects(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(projectId);
+              return newSet;
+            });
+          }
+        }
+      );
+    }
+  };
+
   const addProject = async (repo: GithubRepo) => {
     try {
       const newProject = await repositoryService.addRepository({
@@ -61,6 +91,9 @@ export default function Dashboard() {
       });
       setProjects(prev => [...prev, newProject]);
       setShowProjectDropdown(false);
+      
+      // Start polling the new project
+      startPollingProject(newProject.id);
     } catch (error: any) {
       setRepoError(error.response?.data?.error || 'Failed to add project');
     }
@@ -75,16 +108,18 @@ export default function Dashboard() {
     try {
       await repositoryService.deleteRepository(projectId);
       setProjects(prev => prev.filter(project => project.id !== projectId));
+      
+      // Stop polling if project is being deleted
+      setPollingProjects(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(projectId);
+        return newSet;
+      });
     } catch (error: any) {
       console.error('Failed to delete project:', error);
     } finally {
       setDeleteConfirmation(null);
     }
-  };
-
-  const submitFeedback = () => {
-    setFeedback('');
-    setShowFeedback(false);
   };
 
   const handleProjectClick = (project: LinkedRepository) => {
@@ -111,7 +146,6 @@ export default function Dashboard() {
     }
   }, [navigate]);
 
-  // Close dropdowns when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -125,7 +159,6 @@ export default function Dashboard() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // Add this effect to fetch repositories when dropdown opens
   useEffect(() => {
     if (showProjectDropdown) {
       const fetchRepositories = async () => {
@@ -144,6 +177,11 @@ export default function Dashboard() {
       fetchRepositories();
     }
   }, [showProjectDropdown]);
+
+  const submitFeedback = () => {
+    setFeedback('');
+    setShowFeedback(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#0A0C10] text-white">
@@ -264,9 +302,9 @@ export default function Dashboard() {
             projects.map((project) => (
               <div
                 key={project.id}
-                className={`bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors cursor-pointer ${
+                className={`bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors ${
                   project.analysis_status === 'complete'
-                    ? ''
+                    ? 'cursor-pointer'
                     : 'opacity-70 cursor-not-allowed'
                 }`}
                 onClick={() => handleProjectClick(project)}
@@ -277,15 +315,21 @@ export default function Dashboard() {
                     {project.description && (
                       <p className="text-gray-400 mt-1">{project.description}</p>
                     )}
-                    <div className="flex items-center space-x-2 mt-2">
-                      {project.languages.map((language) => (
-                        <span
-                          key={language}
-                          className="px-2 py-1 bg-gray-700 rounded-full text-sm text-blue-400"
-                        >
-                          {language}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {project.analysis_status === 'complete' && project.analysis_results?.project_info?.technologies ? (
+                        project.analysis_results.project_info.technologies.map((tech: string) => (
+                          <span
+                            key={tech}
+                            className="px-2 py-1 bg-blue-900/20 text-blue-400 rounded-full text-sm"
+                          >
+                            {tech}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-400">
+                          Technologies will be shown after analysis
                         </span>
-                      ))}
+                      )}
                     </div>
                   </div>
                   <button
@@ -295,12 +339,18 @@ export default function Dashboard() {
                     <Trash2 size={20} />
                   </button>
                 </div>
-                <div className="flex items-center space-x-2 mt-2">
+                <div className="flex items-center space-x-2 mt-4">
                   {project.analysis_status === 'pending' && (
-                    <span className="text-yellow-400">Analysis Pending...</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-yellow-400 border-t-transparent"></div>
+                      <span className="text-yellow-400">Analysis Pending...</span>
+                    </div>
                   )}
                   {project.analysis_status === 'analyzing' && (
-                    <span className="text-blue-400">Analyzing...</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-400 border-t-transparent"></div>
+                      <span className="text-blue-400">Analyzing...</span>
+                    </div>
                   )}
                   {project.analysis_status === 'failed' && (
                     <span className="text-red-400">Analysis Failed</span>

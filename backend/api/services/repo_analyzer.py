@@ -18,7 +18,6 @@ import sys
 from datetime import datetime
 from dotenv import load_dotenv
 
-
 @dataclass
 class ErrorResponse:
     """Structured error response"""
@@ -120,19 +119,12 @@ class RepoAnalyzer:
                     # Get SonarQube Analysis
                     project_key = repo_url.split('/')[-1].replace('.git', '').lower()
                     sonar_result = self.sonar_analyzer.analyze_repository(str(self.repo_dir), project_key)
-                    
+                    print("\n\nSONAR: ", sonar_result)
                     if not sonar_result:
-                        logger.warning("SonarQube analysis failed, using empty metrics")
-                        sonar_result = {
-                            "metrics": {
-                                "bugs": 0,
-                                "vulnerabilities": 0,
-                                "code_smells": 0,
-                                "security_hotspots": 0
-                            },
-                            "issues": [],
-                            "security_hotspots": []
-                        }
+                        return ErrorResponse(
+                            error="SonarQube Analysis Failed",
+                            details="Failed to perform SonarQube analysis"
+                        )
                     
                     # Combine results
                     return AnalysisResult(
@@ -218,6 +210,8 @@ class RepoAnalyzer:
                     error="Invalid API Response",
                     details="API response format was not as expected"
                 )
+            
+          
                 
             analysis = response_json[0].get('generated_text', '')
             if not analysis:
@@ -242,9 +236,12 @@ class RepoAnalyzer:
 
     def _parse_ai_analysis(self, analysis: str) -> Union[Dict, ErrorResponse]:
         """Parse AI response into structured format"""
+        
         try:
             clean_analysis = analysis.replace('\n---\n', '')
+            print("Final JSON: ")
             json_analysis = json.loads(clean_analysis)
+            
             return json_analysis
         except json.JSONDecodeError as e:
             return ErrorResponse(
@@ -276,9 +273,10 @@ Please provide a JSON format response with the following fields:
 3. Main Purpose and Functionality
 4. Technologies Used
 
-Provide with a JSON response in the following format:
-  name: "SkillScout",
-  description: "A comprehensive platform designed to bridge the gap between developers and employers through skill-based hiring. The project features an innovative assessment system that evaluates technical capabilities through real-world project analysis, automated code review, and interactive technical assessments. It integrates with GitHub to analyze coding patterns, project structures, and development practices, providing meaningful insights for both candidates and employers.",
-  technologies: ["React", "TypeScript", "Node.js", "PostgreSQL", "Supabase", "TailwindCSS"]
+Provide ONLY a JSON response in the following format, with no additional text or formatting:
+  {{
+  "name": "Project Name",
+  "description": "Project description and main purpose",
+  "technologies": ["Tech1", "Tech2", "Tech3"]
+}}
 """
-

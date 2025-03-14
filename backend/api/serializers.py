@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, CandidateProfile, LinkedRepository
+from .models import User, CandidateProfile, LinkedRepository, Assessment, AssessmentAttempt
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -28,4 +28,16 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
 class LinkedRepositorySerializer(serializers.ModelSerializer):
     class Meta:
         model = LinkedRepository
-        fields = ('id', 'repo_name', 'repo_url', 'description', 'languages', 'analysis_status') 
+        fields = ('id', 'repo_name', 'repo_url', 'description', 'languages', 'analysis_status', 'analysis_results')
+
+class AssessmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Assessment
+        fields = ('id', 'repository', 'questions', 'score', 'completed_at', 'created_at', 'correct_answers')
+        read_only_fields = ('id', 'created_at')
+
+class AssessmentAttemptSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssessmentAttempt
+        fields = ('id', 'assessment', 'answers', 'score', 'time_spent', 'completed_at', 'correct_answers')
+        read_only_fields = ('id', 'completed_at')

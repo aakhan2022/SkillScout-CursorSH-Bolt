@@ -98,7 +98,9 @@ export default function SecurityView({ onBack, vulnerabilities }: SecurityViewPr
                 <span>Line {vulnerability.line}</span>
               </div>
               <pre className="text-sm overflow-x-auto">
-                <code className="text-gray-300">{vulnerability.code_snippet}</code>
+              <code className="block p-4 text-red-400">
+                  {vulnerability.code_snippet}
+                </code>
               </pre>
             </div>
           </div>

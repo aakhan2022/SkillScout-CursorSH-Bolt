@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -6,17 +6,38 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 import requests
 from django.conf import settings
-from .models import User, CandidateProfile, LinkedRepository
-from .serializers import UserSerializer, CandidateProfileSerializer, LinkedRepositorySerializer
+from .models import User, CandidateProfile, LinkedRepository, Assessment, AssessmentAttempt
+from .serializers import (
+    UserSerializer, CandidateProfileSerializer, LinkedRepositorySerializer,
+    AssessmentSerializer, AssessmentAttemptSerializer
+)
 from .services.repo_analyzer import RepoAnalyzer
 from .services.repo_analyzer import ErrorResponse
+from .services.assessment_generator import AssessmentGenerator
+from django.utils import timezone
 import json
 from loguru import logger
 import os
 import shutil
 import errno
 import stat
-# Create your views here.
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_repository(request, repo_id):
+    try:
+        repository = get_object_or_404(
+            LinkedRepository,
+            id=repo_id,
+            candidate=request.user.candidate_profile
+        )
+        serializer = LinkedRepositorySerializer(repository)
+        return Response(serializer.data)
+    except LinkedRepository.DoesNotExist:
+        return Response(
+            {'error': 'Repository not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
 @api_view(['POST'])
 def register_candidate(request):
@@ -253,16 +274,28 @@ def add_repository(request):
                 
                 # Generate review
                 review_data = analyzer.analyze_repository(repository.repo_url)
+                
                 # Check if result is an error response
                 if isinstance(review_data, ErrorResponse):
                     logger.error("Analysis failed:")
                     print(json.dumps(review_data.to_json(), indent=2))
+                    repository.analysis_status = 'failed'
+                    repository.save()
                     return Response(
                         {'error': 'Analysis failed'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
 
                 analysis_json = review_data.to_json()
+                
+                # Check if SonarQube analysis failed
+                if not analysis_json.get('code_quality', {}).get('metrics'):
+                    repository.analysis_status = 'failed'
+                    repository.save()
+                    return Response(
+                        {'error': 'SonarQube analysis failed'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
                 
                 # Update repository with analysis results
                 repository.analysis_results = analysis_json
@@ -356,7 +389,6 @@ def delete_repository(request, repo_id):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_repo_summary(request, repo_id):
@@ -367,8 +399,6 @@ def get_repo_summary(request, repo_id):
         # Check if analysis_results already exists and is not empty
         if project.analysis_results and isinstance(project.analysis_results, dict):
             print("Returning existing analysis results")
-            project.analysis_status = 'complete'
-            project.save()
             return Response(project.analysis_results)
             
         # If no existing analysis, perform new analysis
@@ -381,7 +411,26 @@ def get_repo_summary(request, repo_id):
         
         # Generate review
         review_data = analyzer.analyze_repository(project.repo_url)
+        
+        # Check if result is an error response
+        if isinstance(review_data, ErrorResponse):
+            project.analysis_status = 'failed'
+            project.save()
+            return Response(
+                {'error': 'Analysis failed'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
         analysis_json = review_data.to_json()
+        
+        # Check if SonarQube analysis failed
+        if not analysis_json.get('code_quality', {}).get('metrics'):
+            project.analysis_status = 'failed'
+            project.save()
+            return Response(
+                {'error': 'SonarQube analysis failed'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         
         print("\n\nanalysis_json: ", analysis_json)
         
@@ -391,6 +440,8 @@ def get_repo_summary(request, repo_id):
             project.analysis_status = 'complete'
             project.save()
         except Exception as e:
+            project.analysis_status = 'failed'
+            project.save()
             return Response(
                 {'error': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -407,4 +458,173 @@ def get_repo_summary(request, repo_id):
         return Response(
             {'error': str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_assessment(request, repo_id):
+    try:
+        repository = get_object_or_404(
+            LinkedRepository,
+            id=repo_id,
+            candidate=request.user.candidate_profile
+        )
+        
+        if repository.analysis_status != 'complete':
+            return Response(
+                {'error': 'Repository analysis must be complete before generating assessment'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Check if assessment already exists
+        existing_assessment = Assessment.objects.filter(repository=repository).first()
+        if existing_assessment:
+            serializer = AssessmentSerializer(existing_assessment)
+            return Response(serializer.data)
+            
+        # Generate new assessment
+        generator = AssessmentGenerator(settings.HUGGINGFACE_TOKEN)
+        assessment_data = generator.generate_assessment(repository.analysis_results)
+        
+        if not assessment_data:
+            return Response(
+                {'error': 'Failed to generate assessment'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+        # Create assessment
+        assessment = Assessment.objects.create(
+            repository=repository,
+            questions=[{
+                'text': q.text,
+                'options': q.options,
+                'correct_answer': q.correct_answer,
+                'explanation': q.explanation
+            } for q in assessment_data.questions]
+        )
+        
+        serializer = AssessmentSerializer(assessment)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_assessment(request, assessment_id):
+    try:
+        assessment = get_object_or_404(Assessment, id=assessment_id)
+        
+        # Validate request data
+        if not isinstance(request.data.get('answers'), list):
+            return Response(
+                {'error': 'Invalid answers format'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        answers = request.data['answers']
+        time_spent = request.data.get('time_spent', 0)
+        
+        # Calculate score and correct answers
+        correct_answers = sum(
+            1 for i, answer in enumerate(answers)
+            if answer == assessment.questions[i]['correct_answer']
+        )
+        score = (correct_answers / len(assessment.questions)) * 100
+        
+        # Create attempt
+        attempt = AssessmentAttempt.objects.create(
+            assessment=assessment,
+            candidate=request.user.candidate_profile,
+            answers=answers,
+            correct_answers=correct_answers,
+            score=score,
+            time_spent=time_spent
+        )
+        
+        # Update assessment if first attempt
+        if not assessment.completed_at:
+            assessment.score = score
+            assessment.correct_answers = correct_answers
+            assessment.completed_at = timezone.now()
+            assessment.save()
+        
+        serializer = AssessmentAttemptSerializer(attempt)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_assessment(request, repo_id):
+    try:
+        # Get the latest assessment for the repository
+        assessment = Assessment.objects.filter(
+            repository__id=repo_id,
+            repository__candidate=request.user.candidate_profile
+        ).latest('created_at')
+        
+        # Get the latest attempt if assessment is completed
+        if assessment.completed_at:
+            latest_attempt = AssessmentAttempt.objects.filter(
+                assessment=assessment,
+                candidate=request.user.candidate_profile
+            ).latest('completed_at')
+            
+            # Include attempt data in response
+            serializer = AssessmentSerializer(assessment)
+            data = serializer.data
+            data['correct_answers'] = latest_attempt.correct_answers
+            data['answers'] = latest_attempt.answers
+            return Response(data)
+            
+        serializer = AssessmentSerializer(assessment)
+        return Response(serializer.data)
+    
+    except Assessment.DoesNotExist:
+        return Response(
+            {'error': 'Assessment not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_file_content(request, repo_id, file_path):
+    try:
+        repository = LinkedRepository.objects.get(id=repo_id)
+        
+        # Ensure the file path is within the cloned repository directory
+        full_path = os.path.join(settings.CLONED_REPOS_DIR, repository.repo_name.split('/')[-1], file_path)
+        print("FULL PATH:", full_path)
+        
+        # Security check to prevent directory traversal
+        if not os.path.normpath(full_path).startswith(settings.CLONED_REPOS_DIR):
+            return Response(
+                {'error': 'Invalid file path'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if os.path.exists(full_path):
+            with open(full_path, 'r', encoding='utf-8') as file:
+                content = file.readlines()
+                return Response({
+                    'content': content
+                })
+        else:
+            return Response(
+                {'error': 'File not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+    except LinkedRepository.DoesNotExist:
+        return Response(
+            {'error': 'Repository not found'},
+            status=status.HTTP_404_NOT_FOUND
         )
