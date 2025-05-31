@@ -1,51 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { GraduationCap, Star, Trophy, MapPin, Briefcase, Github, ChevronDown } from 'lucide-react';
-
-// Mock candidate data
-const mockCandidate = {
-  id: '1',
-  name: 'Alex Thompson',
-  title: 'Senior Full Stack Developer',
-  location: 'San Francisco, CA',
-  skills: ['React', 'Node.js', 'Python', 'AWS', 'TypeScript'],
-  experience: 6,
-  education: 'MS Computer Science',
-  skillScore: 92,
-  profileImage: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?fit=crop&w=100&h=100',
-  bio: 'Passionate full-stack developer with 6+ years of experience building scalable web applications. Focused on clean code and modern development practices.',
-  githubRepos: [
-    {
-      id: 'repo1',
-      name: 'e-commerce-platform',
-      description: 'A modern e-commerce platform built with React and Node.js',
-      stars: 245,
-      forks: 45,
-      language: 'TypeScript',
-      url: 'https://github.com/alexthompson/e-commerce-platform',
-      lastUpdated: '2024-02-15'
-    },
-    {
-      id: 'repo2',
-      name: 'react-state-manager',
-      description: 'Lightweight state management solution for React applications',
-      stars: 1200,
-      forks: 180,
-      language: 'TypeScript',
-      url: 'https://github.com/alexthompson/react-state-manager',
-      lastUpdated: '2024-01-20'
-    }
-  ]
-};
+import { employerService, type CandidateDetail } from '../services/employer';
 
 export default function CandidateProfile() {
   const { candidateId } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'overview' | 'projects'>('overview');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [candidate, setCandidate] = useState<CandidateDetail | null>(null);
+
+  const getProjectTechnologies = () => {
+    if (!candidate) return new Set<string>();
+
+    const technologies = new Set<string>();
+    
+    // Add manually specified skills
+    candidate.skills.forEach(skill => technologies.add(skill));
+
+    return Array.from(technologies);
+  };
+
+  useEffect(() => {
+    const fetchCandidate = async () => {
+      if (!candidateId) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await employerService.getCandidateProfile(candidateId);
+        setCandidate(data);
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to load candidate profile');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCandidate();
+  }, [candidateId]);
 
   const handleProjectClick = (projectId: string) => {
-    navigate(`/project/${projectId}`);
+    if (!candidateId) return;
+    navigate(`/project/${projectId}?candidateId=${candidateId}`);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0A0C10] text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+      </div>
+    );
+  }
+
+  if (error || !candidate) {
+    return (
+      <div className="min-h-screen bg-[#0A0C10] text-white p-8">
+        <div className="max-w-3xl mx-auto bg-red-500/10 border border-red-500 text-red-500 rounded-lg p-4">
+          {error || 'Failed to load candidate profile'}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0C10] text-white">
@@ -80,24 +97,24 @@ export default function CandidateProfile() {
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-6">
               <img
-                src={mockCandidate.profileImage}
-                alt={mockCandidate.name}
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(candidate.full_name)}&background=random`}
+                alt={candidate.full_name}
                 className="w-24 h-24 rounded-full"
               />
               <div>
-                <h1 className="text-3xl font-bold mb-2">{mockCandidate.name}</h1>
+                <h1 className="text-3xl font-bold mb-2">{candidate.full_name}</h1>
                 <div className="flex items-center space-x-4 text-gray-400">
                   <div className="flex items-center space-x-2">
                     <Briefcase size={16} />
-                    <span>{mockCandidate.title}</span>
+                    <span>{candidate.education_level}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <MapPin size={16} />
-                    <span>{mockCandidate.location}</span>
+                    <span>{candidate.location}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Star size={16} />
-                    <span>Score: {mockCandidate.skillScore}</span>
+                    <span>Score: {candidate.skill_score}</span>
                   </div>
                 </div>
               </div>
@@ -143,18 +160,18 @@ export default function CandidateProfile() {
           <div className="space-y-8">
             <div className="bg-[#1a1f2e] rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4">About</h2>
-              <p className="text-gray-300">{mockCandidate.bio}</p>
+              <p className="text-gray-300">{candidate.bio}</p>
             </div>
 
             <div className="bg-[#1a1f2e] rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4">Skills</h2>
               <div className="flex flex-wrap gap-2">
-                {mockCandidate.skills.map((skill) => (
+                {getProjectTechnologies().map((tech) => (
                   <span
-                    key={skill}
+                    key={tech}
                     className="px-3 py-1 bg-blue-900/50 text-blue-400 rounded-full text-sm"
                   >
-                    {skill}
+                    {tech}
                   </span>
                 ))}
               </div>
@@ -165,11 +182,11 @@ export default function CandidateProfile() {
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 text-gray-300">
                   <Briefcase className="text-blue-400" size={20} />
-                  <span>{mockCandidate.experience} years of professional experience</span>
+                  <span>{candidate.experience_years} years of professional experience</span>
                 </div>
                 <div className="flex items-center space-x-2 text-gray-300">
                   <GraduationCap className="text-blue-400" size={20} />
-                  <span>{mockCandidate.education}</span>
+                  <span>{candidate.education_level}</span>
                 </div>
               </div>
             </div>
@@ -178,7 +195,7 @@ export default function CandidateProfile() {
 
         {activeTab === 'projects' && (
           <div className="space-y-6">
-            {mockCandidate.githubRepos.map((repo) => (
+            {candidate.repositories.map((repo) => (
               <div 
                 key={repo.id} 
                 className="bg-[#1a1f2e] rounded-lg p-6 hover:bg-[#1e2436] transition-colors cursor-pointer"
@@ -187,17 +204,25 @@ export default function CandidateProfile() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-3">
                     <Github size={24} className="text-gray-400" />
-                    <h3 className="text-xl font-medium">{repo.name}</h3>
+                    <h3 className="text-xl font-medium">{repo.repo_name}</h3>
                   </div>
-                  <div className="flex items-center space-x-4 text-sm text-gray-400">
-                    <span>⭐ {repo.stars}</span>
-                    <span>🔱 {repo.forks}</span>
-                  </div>
+                  {repo.analysis_status === 'complete' && (
+                    <div className="flex items-center space-x-4 text-sm text-gray-400">
+                      <span>⭐ {repo.analysis_results?.code_quality?.metrics?.maintainability_rating || 'N/A'}</span>
+                      <span>🔱 {repo.analysis_results?.code_quality?.metrics?.reliability_rating || 'N/A'}</span>
+                    </div>
+                  )}
                 </div>
                 <p className="text-gray-300 mb-4">{repo.description}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-blue-400">{repo.language}</span>
-                  <span className="text-sm text-gray-400">Last updated: {repo.lastUpdated}</span>
+                  <div className="flex flex-wrap gap-2">
+                    {repo.languages.map((lang: string) => (
+                      <span key={lang} className="text-sm text-blue-400">{lang}</span>
+                    ))}
+                  </div>
+                  <span className="text-sm text-gray-400">
+                    Analysis: {repo.analysis_status === 'complete' ? 'Complete' : 'In Progress'}
+                  </span>
                 </div>
               </div>
             ))}

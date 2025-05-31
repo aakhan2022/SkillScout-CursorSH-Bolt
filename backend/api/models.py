@@ -10,7 +10,7 @@ class User(AbstractUser):
     
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
     github_token = models.CharField(max_length=255, null=True, blank=True)
-    
+
 class CandidateProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='candidate_profile')
     full_name = models.CharField(max_length=100, blank=True)
@@ -22,6 +22,21 @@ class CandidateProfile(models.Model):
     skills = JSONField(default=list)
     experience_years = models.IntegerField(default=0)
     github_username = models.CharField(max_length=100, null=True, blank=True, unique=True)
+
+class EmployerProfile(models.Model):
+    WORK_TYPE_CHOICES = (
+        ('remote', 'Remote'),
+        ('hybrid', 'Hybrid'),
+        ('onsite', 'On-site'),
+    )
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employer_profile')
+    company_name = models.CharField(max_length=100)
+    company_overview = models.TextField(blank=True)
+    work_type = models.CharField(max_length=10, choices=WORK_TYPE_CHOICES)
+    location = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 class LinkedRepository(models.Model):
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE, related_name='repositories')
@@ -45,7 +60,7 @@ class LinkedRepository(models.Model):
 
 class Assessment(models.Model):
     repository = models.ForeignKey(LinkedRepository, on_delete=models.CASCADE, related_name='assessments')
-    questions = JSONField()  # Stores questions, options, and correct answers
+    questions = JSONField()
     correct_answers = models.IntegerField(null=True, blank=True)
     score = models.IntegerField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -55,8 +70,8 @@ class Assessment(models.Model):
 class AssessmentAttempt(models.Model):
     assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, related_name='attempts')
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
-    answers = JSONField()  # Stores user's answers
+    answers = JSONField()
     correct_answers = models.IntegerField()
     score = models.IntegerField()
-    time_spent = models.IntegerField()  # Time spent in seconds
+    time_spent = models.IntegerField()
     completed_at = models.DateTimeField(auto_now_add=True)

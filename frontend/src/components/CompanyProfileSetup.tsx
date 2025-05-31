@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MapPin, Globe2 } from 'lucide-react';
+import { employerService } from '../services/employer';
+import type { EmployerProfile } from '../services/employer';
 
 type WorkType = 'remote' | 'hybrid' | 'onsite';
 
@@ -10,11 +12,30 @@ export default function CompanyProfileSetup() {
   const [overview, setOverview] = useState('');
   const [workType, setWorkType] = useState<WorkType | ''>('');
   const [location, setLocation] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const profile = await employerService.getProfile();
+        if (profile) {
+          setOverview(profile.company_overview || '');
+          setWorkType(profile.work_type || '');
+          setLocation(profile.location || '');
+        }
+      } catch (error) {
+        // Ignore error - this is expected for new profiles
+      }
+    };
+
+    fetchProfile();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setLoading(true);
 
     try {
       if (!overview || !workType) {
@@ -25,20 +46,18 @@ export default function CompanyProfileSetup() {
         throw new Error('Please provide company location');
       }
 
-      // Mock API call to save company profile
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const profileData: Partial<EmployerProfile> = {
+        company_overview: overview,
+        work_type: workType,
+        location: location || ''
+      };
 
-      // Store company profile data
-      localStorage.setItem('company_overview', overview);
-      localStorage.setItem('company_work_type', workType);
-      if (location) {
-        localStorage.setItem('company_location', location);
-      }
-
-      // Navigate to employer dashboard
+      await employerService.updateProfile(profileData);
       navigate('/emp-dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -126,9 +145,10 @@ export default function CompanyProfileSetup() {
               {workType === 'remote' && (
                 <button
                   type="submit"
+                  disabled={loading}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors"
                 >
-                  Complete Profile
+                  {loading ? 'Saving...' : 'Complete Profile'}
                 </button>
               )}
             </>
@@ -164,9 +184,10 @@ export default function CompanyProfileSetup() {
                 </button>
                 <button
                   type="submit"
+                  disabled={loading}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors"
                 >
-                  Complete Profile
+                  {loading ? 'Saving...' : 'Complete Profile'}
                 </button>
               </div>
             </div>

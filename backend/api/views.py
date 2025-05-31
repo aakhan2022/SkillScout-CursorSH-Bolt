@@ -6,10 +6,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 import requests
 from django.conf import settings
-from .models import User, CandidateProfile, LinkedRepository, Assessment, AssessmentAttempt
+from .models import User, CandidateProfile, LinkedRepository, Assessment, AssessmentAttempt, EmployerProfile
 from .serializers import (
-    UserSerializer, CandidateProfileSerializer, LinkedRepositorySerializer,
-    AssessmentSerializer, AssessmentAttemptSerializer
+    CandidateDetailSerializer, UserSerializer, CandidateProfileSerializer, LinkedRepositorySerializer,
+    AssessmentSerializer, AssessmentAttemptSerializer, EmployerProfile, EmployerProfileSerializer, CandidateListSerializer
 )
 from .services.repo_analyzer import RepoAnalyzer
 from .services.repo_analyzer import ErrorResponse
@@ -21,6 +21,7 @@ import os
 import shutil
 import errno
 import stat
+from django.db.models import Q
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -301,6 +302,9 @@ def add_repository(request):
                 repository.analysis_results = analysis_json
                 repository.analysis_status = 'complete'
                 repository.save()
+
+                if repository.analysis_status == 'complete' and repository.analysis_results:
+                    update_candidate_skills(repository)
                 
             except Exception as e:
                 repository.analysis_status = 'failed'
@@ -328,6 +332,31 @@ def add_repository(request):
             {'error': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+def update_candidate_skills(repo: LinkedRepository):
+    """Update candidate skills based on repository analysis"""
+    try:
+        if not repo.analysis_results or 'project_info' not in repo.analysis_results:
+            return
+            
+        # Get technologies from analysis results
+        technologies = repo.analysis_results['project_info'].get('technologies', [])
+        if not technologies:
+            return
+            
+        # Get candidate's existing skills
+        candidate = repo.candidate
+        existing_skills = set(candidate.skills or [])
+        
+        # Add new technologies to skills
+        updated_skills = list(existing_skills.union(technologies))
+        
+        # Update candidate profile
+        candidate.skills = updated_skills
+        candidate.save()
+        
+    except Exception as e:
+        print(f"Error updating candidate skills: {str(e)}")
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -568,14 +597,14 @@ def get_assessment(request, repo_id):
         # Get the latest assessment for the repository
         assessment = Assessment.objects.filter(
             repository__id=repo_id,
-            repository__candidate=request.user.candidate_profile
+            #repository__candidate=request.user.candidate_profile
         ).latest('created_at')
         
         # Get the latest attempt if assessment is completed
         if assessment.completed_at:
             latest_attempt = AssessmentAttempt.objects.filter(
                 assessment=assessment,
-                candidate=request.user.candidate_profile
+                #candidate=request.user.candidate_profile
             ).latest('completed_at')
             
             # Include attempt data in response
@@ -627,4 +656,171 @@ def get_file_content(request, repo_id, file_path):
         return Response(
             {'error': 'Repository not found'},
             status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['POST'])
+def register_employer(request):
+    """Register a new employer"""
+    try:
+        data = request.data.copy()
+        data['role'] = 'employer'
+        data['username'] = data.get('email')  # Use email as username
+        
+        serializer = UserSerializer(data=data)
+        if serializer.is_valid():
+            user = serializer.save()
+            
+            # Create employer profile
+            EmployerProfile.objects.create(
+                user=user,
+                company_name=data.get('company_name', '')
+            )
+            
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def employer_profile(request):
+    """Get or update employer profile"""
+    try:
+        profile = request.user.employer_profile
+        
+        if request.method == 'GET':
+            serializer = EmployerProfileSerializer(profile)
+            return Response(serializer.data)
+            
+        elif request.method == 'PUT':
+            serializer = EmployerProfileSerializer(profile, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+    except EmployerProfile.DoesNotExist:
+        return Response(
+            {'error': 'Employer profile not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def search_candidates(request):
+    """Search and filter candidates"""
+    try:
+        # Get query parameters
+        query = request.GET.get('q', '')
+        skills = request.GET.getlist('skills[]', [])
+        sort_by = request.GET.get('sort_by', 'best_match')
+        
+        # Base queryset
+        candidates = CandidateProfile.objects.all()
+        
+        # Apply search filter
+        if query:
+            candidates = candidates.filter(
+                Q(full_name__icontains=query) |
+                Q(skills__contains=query) |
+                Q(location__icontains=query)
+            )
+        
+        # Apply skills filter
+        if skills:
+            for skill in skills:
+                candidates = candidates.filter(skills__contains=skill)
+        
+        # Apply sorting
+        if sort_by == 'skill_score':
+            # This is a basic implementation - you might want to add proper sorting
+            # based on the calculated skill score
+            candidates = sorted(
+                candidates,
+                key=lambda x: CandidateListSerializer().get_skill_score(x),
+                reverse=True
+            )
+        
+        serializer = CandidateListSerializer(candidates, many=True)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_candidate_profile(request, candidate_id):
+    """Get detailed candidate profile with projects"""
+    try:
+        # Ensure requester is an employer
+        if request.user.role != 'employer':
+            return Response(
+                {'error': 'Only employers can view candidate profiles'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # Get candidate profile
+        candidate = CandidateProfile.objects.get(id=candidate_id)
+        serializer = CandidateDetailSerializer(candidate)
+        return Response(serializer.data)
+        
+    except CandidateProfile.DoesNotExist:
+        return Response(
+            {'error': 'Candidate not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_candidate_project(request, candidate_id, project_id):
+    """Get detailed project information including assessment"""
+    try:
+        # Ensure requester is an employer
+        if request.user.role != 'employer':
+            return Response(
+                {'error': 'Only employers can view candidate projects'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # Get project
+        project = LinkedRepository.objects.get(
+            id=project_id,
+            candidate_id=candidate_id
+        )
+        
+        # Get latest assessment
+        assessment = Assessment.objects.filter(
+            repository=project
+        ).order_by('-created_at').first()
+        
+        # Combine project and assessment data
+        project_data = LinkedRepositorySerializer(project).data
+        if assessment:
+            project_data['assessment'] = AssessmentSerializer(assessment).data
+            
+        return Response(project_data)
+        
+    except LinkedRepository.DoesNotExist:
+        return Response(
+            {'error': 'Project not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

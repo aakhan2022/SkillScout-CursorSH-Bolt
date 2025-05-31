@@ -19,4 +19,11 @@ urlpatterns = [
     path('api/repositories/<str:repo_id>/assessment/generate/', views.generate_assessment, name='generate-assessment'),
     path('api/assessment/<str:assessment_id>/submit/', views.submit_assessment, name='submit-assessment'),
     path('api/repositories/<str:repo_id>/file/<path:file_path>/', views.get_file_content, name='get-file-content'),
+    # New employer URLs
+    path('api/auth/register/employer/', views.register_employer, name='register-employer'),
+    path('api/employer/profile/', views.employer_profile, name='employer-profile'),
+    path('api/employer/candidates/', views.search_candidates, name='search-candidates'),
+    # New employer candidate profile URLs
+    path('api/employer/candidates/<str:candidate_id>/', views.get_candidate_profile, name='candidate-profile'),
+    path('api/employer/candidates/<str:candidate_id>/projects/<str:project_id>/', views.get_candidate_project, name='candidate-project'),
 ]

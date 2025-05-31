@@ -3,3 +3,5 @@ backend/virtualenv/
 backend/db.sqlite3
 backend/backend/__pycache__/settings.cpython-313.pyc
 backend/db.sqlite3
+backend/db.sqlite3
+backend/db.sqlite3

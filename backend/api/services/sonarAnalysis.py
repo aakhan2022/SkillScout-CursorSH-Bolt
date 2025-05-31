@@ -67,7 +67,7 @@ class SonarAnalyzer:
                 status_url = f"{self.sonar_host}/api/ce/component"
                 response = requests.get(
                     status_url,
-                    headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"},
+                    headers={"Authorization": f"Bearer squ_1016c1e9e0ddc97d2a3064825f1203b5293d444a"},
                     params={"component": project_key}
                 )
                 response.raise_for_status()
@@ -81,7 +81,7 @@ class SonarAnalyzer:
                     metrics_url = f"{self.sonar_host}/api/measures/component"
                     metrics_response = requests.get(
                         metrics_url,
-                        headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"},
+                        headers={"Authorization": f"Bearer squ_1016c1e9e0ddc97d2a3064825f1203b5293d444a"},
                         params={
                             "component": project_key,
                             "metricKeys": "bugs"
@@ -143,13 +143,13 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
                 "metricKeys": (
                     "bugs,vulnerabilities,code_smells,security_hotspots,"
                     "cognitive_complexity,complexity,sqale_rating,"
-                    "reliability_rating,security_rating"
+                    "reliability_rating,security_rating,"
                 )
             }
             
             metrics_response = requests.get(
                 metrics_url, 
-                headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"},
+                headers={"Authorization": f"Bearer squ_1016c1e9e0ddc97d2a3064825f1203b5293d444a"},
                 params=metrics_params
             )
             metrics_response.raise_for_status()
@@ -171,7 +171,7 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
             
             issues_response = requests.get(
                 issues_url,
-                headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"},
+                headers={"Authorization": f"Bearer squ_1016c1e9e0ddc97d2a3064825f1203b5293d444a"},
                 params=issues_params
             )
             issues_response.raise_for_status()
@@ -205,6 +205,8 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
 
             # Fetch security hotspots
             security_hotspots = self._fetch_security_hotspots(project_key)
+
+            
 
             return {
                 "metrics": {
@@ -243,7 +245,7 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
             hotspots_url = f"{self.sonar_host}/api/hotspots/search"
             params = {"projectKey": project_key}
             
-            response = requests.get(hotspots_url, headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"}, params=params)
+            response = requests.get(hotspots_url, headers={"Authorization": f"Bearer squ_1016c1e9e0ddc97d2a3064825f1203b5293d444a"}, params=params)
             response.raise_for_status()
             hotspots_data = response.json().get("hotspots", [])
             detailed_hotspots = []
@@ -283,7 +285,7 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
         """Fetches detailed hotspot details from SonarQube API."""
         try:
             hotspot_url = f"{self.sonar_host}/api/hotspots/show?hotspot={hotspot_key}"
-            response = requests.get(hotspot_url, headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"})
+            response = requests.get(hotspot_url, headers={"Authorization": f"Bearer squ_1016c1e9e0ddc97d2a3064825f1203b5293d444a"})
             response.raise_for_status()
             hotspot_data = response.json().get("rule", {})
             return {
@@ -298,7 +300,7 @@ sonar.exclusions=**/*.pyc,**/__pycache__/**,**/tests/**,**/.git/**
         """Fetches rule details including introduction and root cause."""
         try:
             rule_url = f"{self.sonar_host}/api/rules/show?key={rule_key}"
-            rule_response = requests.get(rule_url, headers={"Authorization": f"Bearer squ_ee9d3b1cfba1ef94a9d514bcd7b7587f8547f664"})
+            rule_response = requests.get(rule_url, headers={"Authorization": f"Bearer squ_1016c1e9e0ddc97d2a3064825f1203b5293d444a"})
             rule_response.raise_for_status()
             rule_data = rule_response.json().get("rule", {}).get("descriptionSections", [])
             details = {"introduction": None, "root_cause": None}

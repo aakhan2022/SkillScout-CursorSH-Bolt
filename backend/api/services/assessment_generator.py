@@ -18,7 +18,7 @@ class Assessment:
 
 class AssessmentGenerator:
     def __init__(self, huggingface_token: str):
-        self.API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+        self.API_URL = "https://router.huggingface.co/nebius/v1/chat/completions"
         self.headers = {"Authorization": f"Bearer {huggingface_token}"}
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -31,25 +31,26 @@ class AssessmentGenerator:
                 self.API_URL,
                 headers=self.headers,
                 json={
-                    "inputs": prompt,
-                    "parameters": {
-                        "max_length": 2000,
-                        "temperature": 0.7,
-                        "top_p": 0.95,
-                        "return_full_text": False
-                    }
+                    "messages": [
+        {
+            "role": "user",
+            "content": prompt,
+        }
+    ],
+                    "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-fast"
                 },
                 timeout=30
             )
             
             response.raise_for_status()
-            response_json = response.json()
+            response_json = response.json()["choices"][0]["message"]
+            print("RESPONSE:", response_json.get('content'))
             
-            if not response_json or not isinstance(response_json, list):
-                logger.error("Invalid API response format")
-                return None
+            # if not response_json or not isinstance(response_json, list):
+            #     logger.error("Invalid API response format")
+            #     return None
                 
-            questions_data = self._parse_response(response_json[0]['generated_text'])
+            questions_data = self._parse_response(response_json.get('content'))
             if not questions_data:
                 return None
                 
@@ -98,6 +99,7 @@ class AssessmentGenerator:
                 "- question: The question text\n"
                 "- options: Array of 4 strings with options prefixed by A), B), C), D)\n"
                 "- correct_answer: Integer 0-3 indicating the correct option index\n"
+                "- Make sure the correct answer integer aligns with the correct option\n"
                 "- explanation: String explaining why the answer is correct\n\n"
                 "Example format:\n"
                 "[\n"

@@ -85,7 +85,8 @@ class RepoAnalyzer:
             'Accept': 'application/vnd.github.v3+json'
         }
         self.hf_headers = {"Authorization": f"Bearer {huggingface_token}"}
-        self.API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+        #self.API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+        self.API_URL = "https://router.huggingface.co/nebius/v1/chat/completions"
         self.sonar_analyzer = SonarAnalyzer(sonar_token, sonar_host)
         
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -190,30 +191,35 @@ class RepoAnalyzer:
                 self.API_URL,
                 headers=self.hf_headers,
                 json={
-                    "inputs": self._get_analysis_prompt(tree, content),
-                    "parameters": {
-                        "max_length": 2000,
-                        "temperature": 0.7,
-                        "top_p": 0.95,
-                        "return_full_text": False
-                    }
+                    "messages": [
+        {
+            "role": "user",
+            "content": self._get_analysis_prompt(tree, content),
+        }
+    ],
+                    "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-fast"
+                    # "inputs": self._get_analysis_prompt(tree, content),
+                    # "parameters": {
+                    #     "temperature": 0.7,
+                    #     "top_p": 0.95,
+                    #     "return_full_text": False
+                    # }
                 },
                 timeout=30
             )
             
-            response.raise_for_status()
+            #response.raise_for_status()
             
-            response_json = response.json()
+            response_json = response.json()["choices"][0]["message"]
+            print("RESPONSE:", response_json.get('content'))
             
-            if not response_json or not isinstance(response_json, list) or len(response_json) == 0:
-                return ErrorResponse(
-                    error="Invalid API Response",
-                    details="API response format was not as expected"
-                )
-            
-          
+            # if not response_json or not isinstance(response_json, list) or len(response_json) == 0:
+            #     return ErrorResponse(
+            #         error="Invalid API Response",
+            #         details="API response format was not as expected"
+            #     )
                 
-            analysis = response_json[0].get('generated_text', '')
+            analysis = response_json.get('content')
             if not analysis:
                 return ErrorResponse(
                     error="Empty Analysis",
@@ -269,7 +275,7 @@ Context:
 Please provide a JSON format response with the following fields:
 
 1. Project Name
-2. Brief Description
+2. Detailed Technical Description from source code in paragraph form
 3. Main Purpose and Functionality
 4. Technologies Used
 

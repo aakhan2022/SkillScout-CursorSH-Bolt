@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { GraduationCap, Mail, Lock, Linkedin } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { employerService } from '../services/employer';
+import { authService } from '../services/auth';
 
 type AuthMode = 'signin' | 'signup';
 
@@ -19,10 +21,6 @@ export default function EmployerAuth() {
     setLoading(true);
 
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Mock validation
       if (email.length < 5 || !email.includes('@')) {
         throw new Error('Please enter a valid email address');
       }
@@ -33,19 +31,18 @@ export default function EmployerAuth() {
         throw new Error('Company name is required');
       }
 
-      // Mock successful authentication
-      localStorage.setItem('user_role', 'employer');
-      localStorage.setItem('user_email', email);
       if (mode === 'signup') {
-        localStorage.setItem('company_name', companyName);
-        // Redirect to company profile setup for new accounts
+        await employerService.register(email, password, companyName);
         navigate('/company-profile-setup');
       } else {
-        // Redirect to dashboard for existing accounts
+        const response = await authService.login(email, password);
+        if (response.user.role !== 'employer') {
+          throw new Error('Invalid account type');
+        }
         navigate('/emp-dashboard');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Authentication failed');
     } finally {
       setLoading(false);
     }
