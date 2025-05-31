@@ -26,4 +26,12 @@ urlpatterns = [
     # New employer candidate profile URLs
     path('api/employer/candidates/<str:candidate_id>/', views.get_candidate_profile, name='candidate-profile'),
     path('api/employer/candidates/<str:candidate_id>/projects/<str:project_id>/', views.get_candidate_project, name='candidate-project'),
+    
+
+    path('api/repositories/<str:repo_id>/files/', views.get_repository_files, name='repository-files'),
+    path('api/repositories/<str:repo_id>/files/content/', views.get_file_content, name='file-content'),
+    path('api/repositories/<str:repo_id>/files/summary/', views.get_file_summary, name='file-summary'),
+
+
+
 ]
