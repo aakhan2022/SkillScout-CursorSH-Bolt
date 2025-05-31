@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 import requests
 from django.conf import settings
+from functools import reduce
+import operator
 from .models import User, CandidateProfile, LinkedRepository, Assessment, AssessmentAttempt, EmployerProfile
 from .serializers import (
     CandidateDetailSerializer, UserSerializer, CandidateProfileSerializer, LinkedRepositorySerializer,
@@ -716,42 +718,45 @@ def search_candidates(request):
     """Search and filter candidates"""
     try:
         # Get query parameters
-        query = request.GET.get('q', '')
+        search_query = request.GET.get('q', '').strip()
         skills = request.GET.getlist('skills[]', [])
         sort_by = request.GET.get('sort_by', 'best_match')
         
-        # Base queryset
-        candidates = CandidateProfile.objects.all()
+        # Start with all candidate profiles
+        queryset = CandidateProfile.objects.all()
         
-        # Apply search filter
-        if query:
-            candidates = candidates.filter(
-                Q(full_name__icontains=query) |
-                Q(skills__contains=query) |
-                Q(location__icontains=query)
+        # Apply text search filters
+        if search_query:
+            queryset = queryset.filter(
+                Q(full_name__regex=rf'\b{search_query}\b') |
+                Q(location__regex=rf'\b{search_query}\b') |
+                Q(skills__regex=rf'\b{search_query}\b') |
+                Q(education_level__regex=rf'\b{search_query}\b')
             )
         
-        # Apply skills filter
+        # Apply skills filter if specified
         if skills:
+            # Filter candidates whose skills list contains any of the selected skills
             for skill in skills:
-                candidates = candidates.filter(skills__contains=skill)
+                queryset = queryset.filter(skills__regex=rf'\b{skill}\b')
         
         # Apply sorting
         if sort_by == 'skill_score':
-            # This is a basic implementation - you might want to add proper sorting
-            # based on the calculated skill score
-            candidates = sorted(
-                candidates,
-                key=lambda x: CandidateListSerializer().get_skill_score(x),
-                reverse=True
-            )
+            # Order by skill score (highest first)
+            queryset = queryset.annotate(
+                score=Cast('skill_score', IntegerField())
+            ).order_by('-score')
+        else:
+            # Default 'best_match' sorting - order by name
+            queryset = queryset.order_by('full_name')
         
-        serializer = CandidateListSerializer(candidates, many=True)
+        # Serialize and return results
+        serializer = CandidateListSerializer(queryset, many=True)
         return Response(serializer.data)
         
     except Exception as e:
         return Response(
-            {'error': str(e)}, 
+            {'error': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
