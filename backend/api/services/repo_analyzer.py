@@ -157,7 +157,7 @@ class RepoAnalyzer:
         try:
             subprocess.run([
                 'git', 'clone',
-                '--depth=2',
+                '--depth=1',
                 '--no-checkout',
                 '--config', 'core.fileMode=false',
                 '--config', 'core.symlinks=false',
