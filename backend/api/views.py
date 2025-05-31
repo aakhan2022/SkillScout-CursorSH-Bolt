@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 import requests
+from pathlib import Path
+from typing import Dict, List, Optional
 from django.conf import settings
 from functools import reduce
 import operator
@@ -822,6 +824,207 @@ def get_candidate_project(request, candidate_id, project_id):
     except LinkedRepository.DoesNotExist:
         return Response(
             {'error': 'Project not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_repository_files(request, repo_id):
+    """Get repository file structure"""
+    try:
+        repo = LinkedRepository.objects.get(id=repo_id)
+        repo_name = repo.repo_name.split("/")[-1]
+        repo_path = os.path.join(settings.CLONED_REPOS_DIR, repo_name)
+        print("REPO PATH:", repo_path)
+        
+        if not os.path.exists(repo_path):
+            return Response(
+                {'error': 'Repository files not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        def get_file_info(path: Path) -> Dict:
+            """Get file metadata"""
+            stats = path.stat()
+            return {
+                'name': path.name,
+                'path': str(path.relative_to(repo_path)),
+                'type': 'directory' if path.is_dir() else 'file',
+                'size': stats.st_size if path.is_file() else None,
+                'extension': path.suffix[1:] if path.suffix else None,
+                'language': get_file_language(path)
+            }
+        
+        def get_file_language(path: Path) -> Optional[str]:
+            """Determine file language based on extension"""
+            ext_map = {
+                'ts': 'TypeScript',
+                'tsx': 'TypeScript',
+                'js': 'JavaScript',
+                'jsx': 'JavaScript',
+                'py': 'Python',
+                'html': 'HTML',
+                'css': 'CSS',
+                'json': 'JSON',
+                'md': 'Markdown'
+            }
+            return ext_map.get(path.suffix[1:])
+        
+        def scan_directory(path: Path) -> List[Dict]:
+            """Recursively scan directory"""
+            items = []
+            try:
+                for item in path.iterdir():
+                    if item.name.startswith('.'):
+                        continue
+                        
+                    info = get_file_info(item)
+                    if item.is_dir():
+                        info['children'] = scan_directory(item)
+                    items.append(info)
+            except Exception as e:
+                print(f"Error scanning {path}: {e}")
+            return sorted(items, key=lambda x: (x['type'] != 'directory', x['name']))
+        
+        file_tree = scan_directory(Path(repo_path))
+        return Response(file_tree)
+        
+    except LinkedRepository.DoesNotExist:
+        return Response(
+            {'error': 'Repository not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_file_content(request, repo_id):
+    """Get file content"""
+    try:
+        repo = LinkedRepository.objects.get(id=repo_id)
+        file_path = request.GET.get('path')
+        
+        if not file_path:
+            return Response(
+                {'error': 'File path is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        repo_name = repo.repo_name.split("/")[-1]    
+        full_path = os.path.join(settings.CLONED_REPOS_DIR, repo_name, file_path)
+        full_path = os.path.normpath(full_path)
+        
+        # Security check - ensure path is within repo directory
+        repo_dir = os.path.join(settings.CLONED_REPOS_DIR, repo_name)
+        if not full_path.startswith(repo_dir):
+            return Response(
+                {'error': 'Invalid file path'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not os.path.exists(full_path) or not os.path.isfile(full_path):
+            return Response(
+                {'error': 'File not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return Response({'content': content})
+        except UnicodeDecodeError:
+            return Response(
+                {'error': 'File is not text-readable'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+    except LinkedRepository.DoesNotExist:
+        return Response(
+            {'error': 'Repository not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_file_summary(request, repo_id):
+    """Generate AI summary for file"""
+    try:
+        repo = LinkedRepository.objects.get(id=repo_id)
+        file_path = request.GET.get('path')
+        
+        if not file_path:
+            return Response(
+                {'error': 'File path is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        repo_name = repo.repo_name.split("/")[-1]
+        full_path = os.path.join(settings.CLONED_REPOS_DIR, repo_name, file_path)
+        full_path = os.path.normpath(full_path)
+        
+        # Security check - ensure path is within repo directory
+        repo_dir = os.path.join(settings.CLONED_REPOS_DIR, repo_name)
+        if not full_path.startswith(repo_dir):
+            return Response(
+                {'error': 'Invalid file path'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not os.path.exists(full_path) or not os.path.isfile(full_path):
+            return Response(
+                {'error': 'File not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            # Use the same Mistral model for consistency
+            from api.services.repo_analyzer import RepoAnalyzer
+            analyzer = RepoAnalyzer(
+                settings.GITHUB_TOKEN,
+                settings.HUGGINGFACE_TOKEN,
+                settings.SONAR_TOKEN
+            )
+            
+            summary = analyzer._generate_ai_review(
+                repo.repo_url,
+                file_path,
+                content
+            )
+            
+            if isinstance(summary, dict) and summary.get('error'):
+                return Response(
+                    {'error': summary['error']},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+                
+            return Response(summary)
+            
+        except UnicodeDecodeError:
+            return Response(
+                {'error': 'File is not text-readable'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+    except LinkedRepository.DoesNotExist:
+        return Response(
+            {'error': 'Repository not found'},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
