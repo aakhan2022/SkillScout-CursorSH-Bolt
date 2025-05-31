@@ -14,6 +14,24 @@ export interface LinkedRepository {
   assessment_score?: number;
 }
 
+export interface FileNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: FileNode[];
+  language?: string;
+  extension?: string;
+  size?: number;
+  content?: string;
+}
+
+export interface FileSummary {
+  purpose: string;
+  components: string[];
+  dependencies: string[];
+  description: string;
+}
+
 export const repositoryService = {
   async addRepository(repo: { full_name: string }): Promise<LinkedRepository> {
     const response = await axios.post(
@@ -24,13 +42,13 @@ export const repositoryService = {
     return response.data;
   },
 
-  async getFileContent(repoId: string, filePath: string): Promise<string[]> {
-    const response = await axios.get(
-      `${API_URL}/repositories/${repoId}/file/${filePath}/`,
-      { headers: getAuthHeader() }
-    );
-    return response.data.content;
-  },
+  // async getFileContent(repoId: string, filePath: string): Promise<string[]> {
+  //   const response = await axios.get(
+  //     `${API_URL}/repositories/${repoId}/file/${filePath}/`,
+  //     { headers: getAuthHeader() }
+  //   );
+  //   return response.data.content;
+  // },
 
   async getRepositories(): Promise<LinkedRepository[]> {
     const response = await axios.get(
@@ -81,7 +99,51 @@ export const repositoryService = {
 
     // Return cleanup function
     return () => clearInterval(pollInterval);
-  }
+  },
+
+  async getFileStructure(id: string): Promise<FileNode[]> {
+    try {
+      const response = await axios.get(
+        `${API_URL}/repositories/${id}/files/`,
+        { headers: getAuthHeader() }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching file structure:', error);
+      return [];
+    }
+  },
+
+  async getFileContent(repoId: string, filePath: string): Promise<string> {
+    try {
+      const response = await axios.get(
+        `${API_URL}/repositories/${repoId}/files/content/?path=${encodeURIComponent(filePath)}`,
+        { headers: getAuthHeader() }
+      );
+      return response.data.content;
+    } catch (error) {
+      console.error(`Error fetching file content for ${filePath}:`, error);
+      return '';
+    }
+  },
+
+  async generateFileSummary(repoId: string, filePath: string): Promise<FileSummary> {
+    try {
+      const response = await axios.get(
+        `${API_URL}/repositories/${repoId}/files/summary/?path=${encodeURIComponent(filePath)}`,
+        { headers: getAuthHeader() }
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Error generating summary for ${filePath}:`, error);
+      return {
+        purpose: 'Unable to generate summary',
+        components: [],
+        dependencies: [],
+        description: 'Error occurred while analyzing this file.'
+      };
+    }
+  },
 };
 
 
