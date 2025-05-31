@@ -7,6 +7,7 @@ import CodeSmellsView from './CodeSmellsView';
 import SecurityView from './SecurityView';
 import { repositoryService } from '../services/repository';
 import { assessmentService } from '../services/assessment';
+import CodeReference from './CodeReference';
 
 type FileType = {
   name: string;
@@ -616,7 +617,7 @@ export default function ProjectDetails() {
         ) : (
           <>
             {activeTab === 'summary' && <ProjectSummaryContent />}
-            {activeTab === 'code' && <CodeReferenceContent />}
+            {activeTab === 'code' && <CodeReference />}
             {activeTab === 'analytics' && <AnalyticsContent />}
             {activeTab === 'assessment' && <Assessment />}
           </>
