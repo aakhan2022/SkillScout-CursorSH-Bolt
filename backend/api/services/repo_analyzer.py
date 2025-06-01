@@ -182,8 +182,9 @@ class RepoAnalyzer:
             )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    def _generate_ai_review(self, repo_url: str, tree: str, content: str) -> Union[Dict, ErrorResponse]:
+    def _generate_ai_review(self, repo_url: str, tree: str, content: str, prompt: Optional[str] = None) -> Union[Dict, ErrorResponse]:
         """Generate project summary using Mistral"""
+        print("PROMPT: ", prompt)
         try:
             logger.info(f"Sending request to Hugging Face API for repository: {repo_url}")
             
@@ -194,7 +195,7 @@ class RepoAnalyzer:
                     "messages": [
         {
             "role": "user",
-            "content": self._get_analysis_prompt(tree, content),
+            "content": prompt or self._get_analysis_prompt(tree, content),
         }
     ],
                     "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-fast"
