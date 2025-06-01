@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ChevronDown, Send, Trash2, Settings, LogOut } from 'lucide-react';
+import { Plus, ChevronDown, Send, Trash2, Settings, LogOut, GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { profileService } from '../services/profile';
 import type { CandidateProfile } from '../services/profile';
 import { githubService, type GithubRepo } from '../services/github';
 import { repositoryService, type LinkedRepository } from '../services/repository';
 import { authService } from '../services/auth';
+
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -189,7 +190,8 @@ export default function Dashboard() {
       <nav className="border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
+            <div className="flex items-center space-x-3">
+              <GraduationCap size={32} className="text-white" />
               <div className="text-2xl font-bold">SkillScout</div>
             </div>
             <div className="flex items-center space-x-4">
