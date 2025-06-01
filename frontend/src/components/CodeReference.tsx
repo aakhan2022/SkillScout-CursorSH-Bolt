@@ -53,6 +53,7 @@ export default function CodeReference() {
     if (file.type !== 'file') return;
     
     try {
+      setSummaryLoading(true);
       // Fetch file content
       const content = await repositoryService.getFileContent(projectId!, file.path);
       setFileContent(content);
@@ -62,6 +63,8 @@ export default function CodeReference() {
       setFileSummary(summary);
     } catch (error) {
       console.error(`Error loading file ${file.path}:`, error);
+    } finally {
+      setSummaryLoading(false);
     }
   };
   
@@ -252,21 +255,7 @@ export default function CodeReference() {
                   </div>
                 )}
                 
-                {fileSummary?.dependencies && fileSummary.dependencies.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-400 mb-1">Dependencies</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {fileSummary.dependencies.map((dep, index) => (
-                        <span 
-                          key={index} 
-                          className="px-2 py-1 bg-gray-800 rounded-md text-green-400 text-sm"
-                        >
-                          {dep}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                
                 
                 <div>
                   <h3 className="text-sm font-medium text-gray-400 mb-1">Description</h3>
