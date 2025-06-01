@@ -966,6 +966,7 @@ def get_file_summary(request, repo_id):
     try:
         repo = LinkedRepository.objects.get(id=repo_id)
         file_path = request.GET.get('path')
+        prompt = request.GET.get('prompt')
         
         if not file_path:
             return Response(
@@ -1001,12 +1002,38 @@ def get_file_summary(request, repo_id):
                 settings.HUGGINGFACE_TOKEN,
                 settings.SONAR_TOKEN
             )
+
+            prompt = f"""
+You are a coding expert. Please analyze this file and provide a concise summary.
+
+Context:
+- File path:
+{file_path}
+
+- Source code:
+{content}
+
+Provide ONLY a JSON response in the following format, with no additional text or formatting:
+           {{ 
+            "purpose": "Brief description of the file's main purpose",
+            "components": ["List of key components, functions, or classes"],
+            "description": "Detailed analysis of the code structure and patterns"
+           }}            
+
+Focus on:
+          1. The file's primary responsibility
+          2. Key components and their roles
+          3. Important dependencies and how they're used
+          4. Code organization and patterns used
+"""
             
             summary = analyzer._generate_ai_review(
                 repo.repo_url,
                 file_path,
-                content
+                content,
+                prompt
             )
+
             
             if isinstance(summary, dict) and summary.get('error'):
                 return Response(
