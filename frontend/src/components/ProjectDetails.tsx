@@ -195,16 +195,7 @@ export default function ProjectDetails() {
     );
   };
 
-  const CodeReferenceContent = () => (
-    <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-3">
-        <FileExplorer />
-      </div>
-      <div className="col-span-9">
-        <FileDetails />
-      </div>
-    </div>
-  );
+
 
   const AnalyticsContent = () => (
     <div className="space-y-8">
@@ -552,10 +543,12 @@ export default function ProjectDetails() {
             <div className="flex items-center space-x-3">
               <GraduationCap size={32} className="text-white" />
               <div className="text-2xl font-bold">SkillScout</div>
+            </div >
+            <div className="flex items-center space-x-2 bg-gray-800 rounded-full px-4 py-2">
+              <span>{repoSummary?.project_info?.name}</span>
             </div>
-            <select className="bg-[#1a1f2e] text-white px-4 py-2 rounded-lg border border-gray-700">
-              <option>{repoSummary?.project_info?.name || 'Loading...'}</option>
-            </select>
+                
+
           </div>
         </div>
       </nav>
