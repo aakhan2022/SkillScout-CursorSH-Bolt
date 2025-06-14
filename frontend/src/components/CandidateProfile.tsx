@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { GraduationCap, Star, Trophy, MapPin, Briefcase, Github, ChevronDown } from 'lucide-react';
+import { GraduationCap, Star, Trophy, MapPin, Briefcase, Github, ChevronDown, Mail } from 'lucide-react';
 import { employerService, type CandidateDetail } from '../services/employer';
+import ContactCandidateModal from './ContactCandidateModal';
 
 export default function CandidateProfile() {
   const { candidateId } = useParams();
@@ -10,6 +11,7 @@ export default function CandidateProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [candidate, setCandidate] = useState<CandidateDetail | null>(null);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   const getProjectTechnologies = () => {
     if (!candidate) return new Set<string>();
@@ -119,8 +121,11 @@ export default function CandidateProfile() {
                 </div>
               </div>
             </div>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors">
-              Contact Candidate
+            <button onClick={() => setShowContactModal(true)}
+             className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 font-medium"
+             >
+               <Mail size={20} />
+               <span>Contact Candidate</span>
             </button>
           </div>
         </div>
@@ -229,6 +234,15 @@ export default function CandidateProfile() {
           </div>
         )}
       </div>
+      {/* Contact Candidate Modal */}
+      {candidate && (
+        <ContactCandidateModal
+          isOpen={showContactModal}
+          onClose={() => setShowContactModal(false)}
+          candidateName={candidate.full_name}
+          candidateId={candidateId!}
+        />
+      )}
     </div>
   );
 }
