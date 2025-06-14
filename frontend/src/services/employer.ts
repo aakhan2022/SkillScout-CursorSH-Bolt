@@ -20,10 +20,12 @@ export interface Candidate {
   experience_years: number;
   skill_score: number;
   repositories: any[];
+  overall_score: number;
 }
 
 export interface CandidateDetail extends Candidate {
   bio: string;
+  skill_score: number;
 }
 
 export interface Project {

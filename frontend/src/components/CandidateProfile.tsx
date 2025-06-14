@@ -116,7 +116,7 @@ export default function CandidateProfile() {
                   </div>
                   <div className="flex items-center space-x-2">
                     <Star size={16} />
-                    <span>Score: {candidate.skill_score}</span>
+                    <span>Overall Score: {candidate.overall_score}</span>
                   </div>
                 </div>
               </div>
