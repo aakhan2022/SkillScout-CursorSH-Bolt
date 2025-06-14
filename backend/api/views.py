@@ -112,7 +112,7 @@ def github_oauth_url(request):
             f'https://github.com/login/oauth/authorize'
             f'?client_id={settings.GITHUB_CLIENT_ID}'
             f'&redirect_uri={settings.GITHUB_REDIRECT_URI}'
-            f'&scope=repo user'
+            f'&scope=repo,user:email'
         )
     })
 
@@ -143,6 +143,35 @@ def github_callback(request):
         ).json()
         
         github_username = github_user['login']
+        #print(github_user)
+
+        emails_response = requests.get(
+            'https://api.github.com/user/emails',
+            headers={'Authorization': f'token {access_token}'}
+        )
+        #emails_response.raise_for_status()
+        github_emails = emails_response.json()
+        print(github_emails)
+
+        # Find the primary verified email
+        primary_email = None
+        for email_info in github_emails:
+            if email_info.get('primary') and email_info.get('verified'):
+                primary_email = email_info['email']
+                break
+        
+        if not primary_email:
+            return Response(
+                {'error': 'No verified primary email found on GitHub account. Please verify your email on GitHub and try again.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+         # Verify that GitHub email matches SkillScout email
+        if primary_email.lower() != request.user.email.lower():
+            return Response(
+                {'error': f'GitHub account email ({primary_email}) does not match your SkillScout account email ({request.user.email}). Please use a GitHub account with the same email address.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Check if this GitHub account is already linked
         try:
