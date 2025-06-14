@@ -102,5 +102,14 @@ export const employerService = {
       { headers: getAuthHeader() }
     );
     return response.data;
+  },
+
+  async contactCandidate(candidateId: string, subject: string, message: string): Promise<void> {
+    const response = await axios.post(
+      `${API_URL}/employer/candidates/${candidateId}/contact/`,
+      { subject, message },
+      { headers: getAuthHeader() }
+    );
+    return response.data;
   }
 };
