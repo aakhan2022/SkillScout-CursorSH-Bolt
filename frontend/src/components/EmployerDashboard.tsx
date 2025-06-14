@@ -232,7 +232,7 @@ export default function EmployerDashboard() {
                   </div>
                   <div className="flex items-center space-x-1 bg-blue-600/20 text-blue-400 px-2 py-1 rounded-full">
                     <Star size={14} />
-                    <span className="text-sm font-medium">{candidate.skill_score}</span>
+                    <span className="text-sm font-medium">{candidate.overall_score}</span>
                   </div>
                 </div>
 

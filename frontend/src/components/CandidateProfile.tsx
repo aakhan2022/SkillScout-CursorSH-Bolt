@@ -183,12 +183,9 @@ export default function CandidateProfile() {
             </div>
 
             <div className="bg-[#1a1f2e] rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Experience & Education</h2>
+              <h2 className="text-xl font-semibold mb-4">Education</h2>
               <div className="space-y-4">
-                <div className="flex items-center space-x-2 text-gray-300">
-                  <Briefcase className="text-blue-400" size={20} />
-                  <span>{candidate.experience_years} years of professional experience</span>
-                </div>
+                
                 <div className="flex items-center space-x-2 text-gray-300">
                   <GraduationCap className="text-blue-400" size={20} />
                   <span>{candidate.education_level}</span>
