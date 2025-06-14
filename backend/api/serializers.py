@@ -57,7 +57,13 @@ class CandidateListSerializer(serializers.ModelSerializer):
     class Meta:
         model = CandidateProfile
         fields = ('id', 'user', 'full_name', 'location', 'education_level', 'skills', 
-                 'experience_years', 'repositories', 'skill_score')
+                 'experience_years', 'repositories', 'skill_score', 'overall_score')
+    
+    def get_overall_score(self, obj):
+        """Calculate overall score for list view"""
+        # Reuse the same logic from CandidateDetailSerializer
+        detail_serializer = CandidateDetailSerializer()
+        return detail_serializer.get_overall_score(obj)
     
     def get_skill_score(self, obj):
         """Calculate skill score based on assessments and repository analysis"""
@@ -110,8 +116,57 @@ class CandidateDetailSerializer(serializers.ModelSerializer):
         model = CandidateProfile
         fields = (
             'id', 'full_name', 'location', 'education_level', 'bio',
-            'skills', 'experience_years', 'repositories', 'skill_score'
+            'skills', 'experience_years', 'repositories', 'skill_score', 'overall_score'
         )
+    
+    def get_overall_score(self, obj):
+        """Calculate an overall score combining skill_score, experience, education, and skill diversity."""
+        # Get the base skill score from the existing method
+        base_skill_score = self.get_skill_score(obj)
+        
+        # Define weights for different factors (adjust as needed)
+        WEIGHT_SKILL_SCORE = 0.70
+        WEIGHT_EDUCATION = 0.15
+        WEIGHT_SKILL_DIVERSITY = 0.15
+        
+        # Factor 1: Skill Score (from code analysis and assessments)
+        # Normalize to a 0-100 scale if not already
+        normalized_skill_score = base_skill_score  # Assuming get_skill_score returns 0-100
+        
+        # Factor 2: Education Level
+        # Assign points based on education level
+        education_points = 0
+        if obj.education_level == 'phd':
+            education_points = 100
+        elif obj.education_level == 'masters':
+            education_points = 80
+        elif obj.education_level == 'bachelors':
+            education_points = 60
+        elif obj.education_level == 'high-school':
+            education_points = 40
+        # Add more levels as needed
+        
+        # Factor 3: Skill Diversity
+        # Count unique skills from candidate's profile and linked repositories
+        all_skills = set(obj.skills)  # Skills from candidate profile
+        for repo in obj.repositories.all():
+            if repo.analysis_results and repo.analysis_status == 'complete':
+                project_info = repo.analysis_results.get('project_info', {})
+                if project_info.get('technologies'):
+                    for tech in project_info['technologies']:
+                        all_skills.add(tech)
+        
+        # Assign points based on the number of unique skills, e.g., 5 points per skill, capped at 100
+        skill_diversity_points = min(len(all_skills) * 5, 100)
+        
+        # Calculate the weighted average
+        overall_score = (
+            (normalized_skill_score * WEIGHT_SKILL_SCORE) +
+            (education_points * WEIGHT_EDUCATION) +
+            (skill_diversity_points * WEIGHT_SKILL_DIVERSITY)
+        )
+        
+        return round(overall_score)
     
     def get_skill_score(self, obj):
         """Calculate skill score based on assessments and repository analysis"""

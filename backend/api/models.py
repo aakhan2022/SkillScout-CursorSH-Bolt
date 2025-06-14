@@ -22,6 +22,7 @@ class CandidateProfile(models.Model):
     skills = JSONField(default=list)
     experience_years = models.IntegerField(default=0)
     github_username = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    overall_score = models.IntegerField(default=0)
 
 class EmployerProfile(models.Model):
     WORK_TYPE_CHOICES = (
