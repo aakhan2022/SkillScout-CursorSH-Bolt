@@ -211,6 +211,7 @@ class RepoAnalyzer:
             
             #response.raise_for_status()
             
+            #print(response.json())
             response_json = response.json()["choices"][0]["message"]
             print("RESPONSE:", response_json.get('content'))
             
