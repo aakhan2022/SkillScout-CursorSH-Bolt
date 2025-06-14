@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/repositories/<str:repo_id>/files/', views.get_repository_files, name='repository-files'),
     path('api/repositories/<str:repo_id>/files/content/', views.get_file_content, name='file-content'),
     path('api/repositories/<str:repo_id>/files/summary/', views.get_file_summary, name='file-summary'),
+    path('api/employer/candidates/<str:candidate_id>/contact/', views.contact_candidate, name='contact-candidate'),
 
 
 

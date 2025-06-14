@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 import requests
+from django.core.mail import send_mail
 from pathlib import Path
 from typing import Dict, List, Optional
 from django.conf import settings
@@ -1054,6 +1055,98 @@ Focus on:
             {'error': 'Repository not found'},
             status=status.HTTP_404_NOT_FOUND
         )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def contact_candidate(request, candidate_id):
+    """Send a message to a candidate via email"""
+    try:
+        # Verify the user is an employer
+        if request.user.role != 'employer':
+            return Response(
+                {'error': 'Only employers can contact candidates'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get the candidate
+        try:
+            candidate_profile = CandidateProfile.objects.get(id=candidate_id)
+            candidate_user = candidate_profile.user
+        except CandidateProfile.DoesNotExist:
+            return Response(
+                {'error': 'Candidate not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get message data
+        subject = request.data.get('subject', '').strip()
+        message = request.data.get('message', '').strip()
+        
+        if not subject:
+            return Response(
+                {'error': 'Subject is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not message:
+            return Response(
+                {'error': 'Message is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get employer info
+        try:
+            employer_profile = request.user.employer_profile
+            company_name = employer_profile.company_name
+        except:
+            company_name = "SkillScout Employer"
+        
+        # Compose email
+        email_subject = f"[SkillScout] Message from {company_name}: {subject}"
+        email_message = f"""
+Hello {candidate_profile.full_name or 'there'},
+
+You have received a message from {company_name} through SkillScout:
+
+Subject: {subject}
+
+Message:
+{message}
+
+---
+This message was sent through the SkillScout platform. If you're interested in this opportunity, you can reply directly to this email.
+
+Best regards,
+The SkillScout Team
+        """.strip()
+        
+        # Send email
+        try:
+            send_mail(
+                subject=email_subject,
+                message=email_message,
+                from_email='noreply@skillscout.com',  # Configure this in settings
+                recipient_list=[candidate_user.email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            return Response(
+                {'error': 'Failed to send email. Please try again later.' + str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        return Response(
+            {'message': 'Message sent successfully'},
+            status=status.HTTP_200_OK
+        )
+        
     except Exception as e:
         return Response(
             {'error': str(e)},

@@ -166,3 +166,14 @@ CLONED_REPOS_DIR = os.path.join(BASE_DIR, 'cloned')
 # Create the directory if it doesn't exist
 if not os.path.exists(CLONED_REPOS_DIR):
     os.makedirs(CLONED_REPOS_DIR)
+
+# Email settings
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # For development
+# For production, use SMTP:
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'aakhan2022@gmail.com'
+EMAIL_HOST_PASSWORD = 'mhpi npqc yacc dvxp'
+DEFAULT_FROM_EMAIL = 'noreply@skillscout.com'
